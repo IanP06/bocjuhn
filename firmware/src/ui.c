@@ -72,8 +72,11 @@ static const uint8_t LAYER_BTN[NLAYER] = {B_FX, B_SEL, B_ENV, B_LFO, B_EDIT, B_G
 #define KEY_DOUBLE 17u           /* the 8th: double speed */
 #define KEY_NOTE0 53             /* the lowest key, F3 */
 
-static const uint16_t LAYER_COL[NLAYER] = {RGB(255, 214, 0), RGB(0, 214, 255), RGB(255, 92, 210),
-                                           RGB(96, 255, 96), RGB(255, 140, 0), RGB(190, 160, 255)};
+/* Engine identity follows the sound across tracks, pages and dials. */
+static const uint16_t ENGINE_COL[NENG] = {
+    RGB(51,123,255), RGB(0,255,72), RGB(0,234,255), RGB(255,37,218),
+    RGB(180,255,0), RGB(255,48,72), RGB(255,230,0), RGB(255,112,0)
+};
 
 static struct {
     uint8_t sel;
@@ -114,6 +117,8 @@ static struct {
     uint32_t edit_t0;
     uint8_t bb_page;             /* the chosen track's balls' page is up (it closes as the other pages do) */
     uint8_t vary_shown;
+    uint8_t clock_page, clock_target, acid_page;
+    uint8_t filter_page, gr_page, speed_page, speed_loop; /* INTERVAL: continuous loop clocks */
     uint8_t bl_page;             /* the chosen track's BRICKLAYER page is up (closes as the other pages do) */
     uint8_t env_down, env_done;  /* the envelope key down since env_t0 (let go soon: ENVELOPE; held: BRICKLAYER's page) */
     uint32_t env_t0;
@@ -192,6 +197,8 @@ static struct {
     uint32_t meter_at;
     uint8_t force;
 } ui;
+
+static uint16_t ui_color(uint32_t l) { return ENGINE_COL[ui.engine[l] % NENG]; }
 
 /* ------------------------------------------------------------ notes --- */
 static uint8_t press_vel;                /* the level of the notes pressed now, 1 .. 126 (0: full) -- the balls set it */
@@ -311,6 +318,7 @@ static void chord_notes(uint32_t root, uint32_t form, uint32_t *n)
 /* a note, or a chord (form + 1), struck or let go on track l */
 static void chord_press(uint32_t l, uint32_t root, uint32_t f1, int on)
 {
+    if(ui.engine[l]==ENG_BAY)f1=0;
     uint32_t n[3], i;
     if (!f1) {
         if (on)
@@ -329,6 +337,7 @@ static void chord_press(uint32_t l, uint32_t root, uint32_t f1, int on)
 /* a note (or chord) latched on track l: told to the voices, so the overload guard never lets it go */
 static void latch_mark(uint32_t l, uint32_t root, uint32_t f1)
 {
+    if(ui.engine[l]==ENG_BAY)f1=0;
     uint32_t n[3], i;
     if (!f1) {
         ev_post(EV_LATCH, l, root, 1);
@@ -390,11 +399,16 @@ static void latch_move(uint32_t l, int32_t d)
     ui.latch[l] = latch;
 }
 
+static void seq_clock(uint32_t l,uint32_t target,uint32_t root,uint32_t form,uint32_t vel,uint32_t due,uint32_t length) {
+    uint32_t notes[3]={root,0,0},n=1;
+    if(form && ui.engine[l]!=ENG_ANIMA && ui.engine[l]!=ENG_BAY) {chord_notes(root,form-1,notes);n=3;}
+    for(uint32_t i=0;i<n;i++) clock_post(l,target,notes[i],vel,due,length);
+}
 #include "balls.c"                       /* (BALLSY, the physics sequencer: SHIFT + EDIT) */
 #include "bricks.c"                      /* (BRICKLAYER, the step sequencer: SHIFT + the envelope key) */
 /* PLAY is the sequencer's on its page (BALLSY's or BRICKLAYER's, up), the looper's on every other */
 static int seq_on(uint32_t l) { return bl.on[l] || bb.on[l]; }
-static int seq_page(void) { return (ui.bl_page && bl.on[ui.sel]) || (ui.bb_page && bb.on[ui.sel]); }
+static int seq_page(void) { return (ui.clock_page && ((ui.clock_target==CK_BALL && bb.on[ui.sel]) || (ui.clock_target==CK_BRICK && bl.on[ui.sel]))) || (ui.bl_page && bl.on[ui.sel]) || (ui.bb_page && bb.on[ui.sel]); }
 static const int8_t RV_DEF[4] = {70, 65, 40, 50};      /* lush, present, not overdone */
 static const char *const RV_NAME[4] = {"SIZE", "DECAY", "DAMP", "MIX"};
 static const int8_t DL_DEF[4] = {65, 40, 40, 50};      /* 400 ms, a few repeats, a little darker each */
@@ -425,11 +439,11 @@ static void level_pan_apply(uint32_t l)
 }
 
 enum { SP_LIST = 1, SP_ASK = 2 };
-#define C_SES RGB(120, 255, 200)
-#define C_SNAP RGB(120, 220, 255)
-#define C_FULL RGB(255, 50, 50)          /* a slot with a session in it */
-#define C_OK RGB(60, 220, 90)
-#define C_BAD RGB(255, 40, 40)
+#define C_SES ui_color(ui.sel)
+#define C_SNAP ui_color(ui.sel)
+#define C_FULL C_RED
+#define C_OK C_GREEN
+#define C_BAD C_RED
 
 /* the whole screen flashes: l1 over l2 (a number in very large type), in colour c and black by turns */
 static void flash(const char *l1, const char *l2, uint16_t c)
@@ -522,7 +536,7 @@ static void pre_short(void)
         mac_apply(ui.sel);
     }
     ui.pre_page = 0;
-    pre_done(pre_load(ui.sel, ui.pre_eng, ui.pre_ix) == SES_OK ? SES_OK : SES_FAIL, "LOADED");
+    pre_done(pre_load(ui.sel, ui.pre_eng, ui.pre_ix), "LOADED");
 }
 
 /* SAVE held */
@@ -544,7 +558,7 @@ static void save_long(void)
     }
     if (ui.ses_page == SP_ASK)
         return;
-    ui.rv_page = ui.env_page = ui.bb_page = ui.bl_page = 0;
+    ui.rv_page = ui.filter_page = ui.gr_page = ui.speed_page = ui.env_page = ui.bb_page = ui.bl_page = 0;
     if (ui.ses_page == SP_LIST && ui.ses_ix != ses_current()) {   /* in the list: into the slot shown, asked */
         ui.ses_new = ui.ses_ix;
         ui.ses_over = (uint8_t)ses_has(ui.ses_ix);
@@ -613,7 +627,7 @@ static void save_short(void)
         ui.force = 1;
         return;
     }
-    ui.rv_page = ui.env_page = ui.bb_page = ui.bl_page = ui.sc_page = ui.mod_page = ui.rx_page = 0;   /* the SNAPSHOTS
+    ui.filter_page = ui.gr_page = ui.speed_page = ui.rv_page = ui.env_page = ui.bb_page = ui.bl_page = ui.sc_page = ui.mod_page = ui.rx_page = 0;   /* the SNAPSHOTS
                                                                                                       * page, framed
                                                                                                       * on the last */
     ui.snap_page = 1;
@@ -632,7 +646,7 @@ static void ses_page_toggle(void)
         ui.force = 1;
         return;
     }
-    ui.rv_page = ui.env_page = ui.bb_page = ui.bl_page = ui.sc_page = ui.mod_page = ui.rx_page = ui.snap_page = 0;
+    ui.filter_page = ui.gr_page = ui.speed_page = ui.rv_page = ui.env_page = ui.bb_page = ui.bl_page = ui.sc_page = ui.mod_page = ui.rx_page = ui.snap_page = 0;
     ui.pre_page = 0;
     ui.ses_page = SP_LIST;
     ui.ses_ix = (uint8_t)(ses_current() ? ses_current() : 1);
@@ -665,6 +679,7 @@ static void mac_apply(uint32_t l)
     for (j = 0; j < 4u; j++)                     /* (the track's own envelope: its values, then whether it is on) */
         lay_env[l][j] = ui.env[l][e][j];
     lay_env_on[l] = ui.env_on[l][e];
+    ba_register[l] = ui.oct[l];
     ui.env_nat_ok = 0;                           /* (the sound may be another: read again) */
 }
 
@@ -828,13 +843,16 @@ static void ui_input(void)
             ui.trk_t0 = fm1_ms;
             ui.trk_done = 0;
             ui.sel = (uint8_t)l;
+            if(ui.engine[l]!=ENG_ANIMA)ui.acid_page=0;
+            ui.force=1;
+            ui.filter_page = ui.gr_page = ui.speed_page = 0;
             ui.vary_shown = 0;
             ui.env_nat_ok = 0;
             if (ui.rv_page || ui.ses_page || ui.snap_page || ui.sc_page || ui.pre_page || ui.env_page || ui.bb_page || ui.bl_page || ui.mod_page ||
                 ui.set_page) {   /* a layer chosen:
                                                                                                     * back to it */
                 ui.rv_page = 0;
-                ui.env_page = ui.bb_page = ui.bl_page = 0;
+                ui.filter_page = ui.gr_page = ui.speed_page = ui.env_page = ui.bb_page = ui.bl_page = 0;
                 ui.ses_page = ui.snap_page = 0;
                 ui.sc_page = 0;
                 ui.pre_page = ui.set_page = ui.mod_page = ui.rx_page = 0;
@@ -853,13 +871,13 @@ static void ui_input(void)
             n[6] = (char)('1' + l);
             n[7] = 0;
             if (clip_from() >= 0 && clip_from() != (int)l) {
-                flash("PASTING", n, LAYER_COL[l]);
+                flash("PASTING", n, ui_color(l));
                 ui_draw();
                 clip_paste(l);
-                flash("PASTED", n, LAYER_COL[l]);
+                flash("PASTED", n, ui_color(l));
             } else {
                 clip_copy(l);
-                flash("COPIED", n, LAYER_COL[l]);
+                flash("COPIED", n, ui_color(l));
             }
         }
     }
@@ -871,8 +889,9 @@ static void ui_input(void)
         ui.force = 1;
     } else if (btn_bit(press, B_SEQ)) {          /* SEQ, again and again: DELAY, REVERB, MOD, PLAY ALONG, back to
                                                   * playing */
-        if (ui.rx_page)
-            ui.rx_page = 0;
+        if(ui.acid_page) ui.acid_page=0;
+        else if (ui.clock_page) {ui.clock_page=0;ui.acid_page=ui.engine[ui.sel]==ENG_ANIMA;}
+        else if (ui.rx_page) { ui.rx_page=0; ui.clock_page=1; }
         else if (ui.mod_page) {
             ui.mod_page = 0;
             ui.rx_page = 1;
@@ -887,12 +906,13 @@ static void ui_input(void)
             ui.rv_page = 1;
             ui.fx = 1;
         }
-        ui.env_page = ui.bb_page = ui.bl_page = 0;
+        ui.filter_page = ui.gr_page = ui.speed_page = ui.env_page = ui.bb_page = ui.bl_page = 0;
         ui.ses_page = ui.snap_page = 0;
         ui.pre_page = ui.set_page = 0;
         ui.sc_page = 0;
         ui.force = 1;
     }
+    if (btn_bit(press,B_ARP)) ui.clock_page=ui.acid_page=0;
     if (btn_bit(press, B_ARP) && (fm1_in.notes >> KEY_SHIFT) & 1u) {   /* SHIFT and ARP: the presets, or back */
         if (ui.pre_page)
             ui.pre_page = 0;
@@ -901,7 +921,7 @@ static void ui_input(void)
             ui.pre_eng = ui.engine[ui.sel];
             if (!ui.pre_ix)
                 ui.pre_ix = 1;
-            ui.rv_page = ui.ses_page = ui.snap_page = ui.sc_page = ui.env_page = ui.bb_page = ui.bl_page = ui.set_page = ui.mod_page = ui.rx_page = 0;
+            ui.filter_page = ui.gr_page = ui.speed_page = ui.rv_page = ui.ses_page = ui.snap_page = ui.sc_page = ui.env_page = ui.bb_page = ui.bl_page = ui.set_page = ui.mod_page = ui.rx_page = 0;
         }
         ui.force = 1;
     } else if (btn_bit(press, B_ARP) && ui.pre_page) {   /* the PRESETS page (where SHIFT + ARP opens it): ARP held saves
@@ -912,11 +932,12 @@ static void ui_input(void)
     } else if (btn_bit(press, B_ARP)) {
         ui.sc_page = (uint8_t)!ui.sc_page;
         ui.rv_page = 0;
-        ui.env_page = ui.bb_page = ui.bl_page = 0;
+        ui.filter_page = ui.gr_page = ui.speed_page = ui.env_page = ui.bb_page = ui.bl_page = 0;
         ui.ses_page = ui.snap_page = 0;
         ui.pre_page = ui.set_page = ui.mod_page = ui.rx_page = 0;
         ui.force = 1;
     }
+    if (btn_bit(press,B_SAVE)) ui.clock_page=ui.acid_page=0;
     if (btn_bit(press, B_SAVE) && (fm1_in.notes >> KEY_SHIFT) & 1u) {   /* SHIFT and SAVE: the SESSIONS page; held,
                                                                          * GLOBAL SETUP; in it, back */
         if (ui.set_page)
@@ -966,19 +987,70 @@ static void ui_input(void)
         }
     }
     sh = (int)((fm1_in.notes >> KEY_SHIFT) & 1u);  /* (SHIFT read once: the knobs below all see the same) */
-    if (sh && !ui.snap_page && (s = enc_take(EN_K4)) != 0) {   /* SHIFT + KNOB 4: the track's delay send */
+    if (sh && !(ui.bl_page && ui.engine[ui.sel]==ENG_ANIMA) && !ui.acid_page && !ui.clock_page && !ui.filter_page && !ui.gr_page && !ui.snap_page && (s = enc_take(EN_K4)) != 0) {   /* SHIFT + KNOB 4: the track's delay send */
         ui.dsend[ui.sel] = (int8_t)clampi(ui.dsend[ui.sel] + 2 * s, 0, 100);
         level_pan_apply(ui.sel);
         ui.dial = DIAL_DSEND;
         ui.dial_until = fm1_ms + 1000u;
     }
-    if (sh && !ui.snap_page && (s = enc_take(EN_K3)) != 0) {   /* SHIFT + KNOB 3: the track's distortion */
+    if (sh && !(ui.bl_page && ui.engine[ui.sel]==ENG_ANIMA) && !ui.acid_page && !ui.clock_page && !ui.filter_page && !ui.gr_page && !ui.snap_page && (s = enc_take(EN_K3)) != 0) {   /* SHIFT + KNOB 3: the track's distortion */
         ui.dist[ui.sel] = (int8_t)clampi(ui.dist[ui.sel] + 2 * s, 0, 100);
         level_pan_apply(ui.sel);
         ui.dial = DIAL_DIST;
         ui.dial_until = fm1_ms + 1000u;
     }
-    if (ui.snap_page) {                          /* the SNAPSHOTS page: KNOB 1 the morph time (its dial); 2 .. 4 nothing */
+    if(ui.acid_page) {
+        static const uint8_t controls[4]={EN_K1,EN_K2,EN_K3,EN_K4};
+        static const int16_t maximum[4]={2,100,500,100};
+        for(uint32_t j=0;j<4;j++)if((s=enc_take(controls[j]))) {acid_edit[ui.sel][j]=(int16_t)clampi(acid_edit[ui.sel][j]+s,0,maximum[j]);ui.force=1;}
+    } else if (ui.clock_page) {
+        uint32_t l=ui.sel,t=ui.clock_target;
+        if((s=enc_take(EN_K1))) {clk.bpm=(uint16_t)clampi(clk.bpm+s,30,300);ui.force=1;}
+        if((s=enc_take(EN_K2))) {ui.clock_target=(uint8_t)clampi((int)t+s,0,2);t=ui.clock_target;ui.force=1;}
+        if((s=enc_take(EN_K3))) {
+            uint8_t mode=(uint8_t)clampi((int)clk.mode[l][t]+s,0,1);
+            if(t==CK_LOOP && loop[l].rec!=LR_IDLE) {say("FINISH REC",1200);mode=clk.mode[l][t];}
+            if(mode!=clk.mode[l][t]) { clock_cancel[l][t]++; clk.mode[l][t]=mode;
+                if(t==CK_BALL) bb_release(l);
+                if(t==CK_BRICK) {bl_release(l);bl.due[l]=fm1_ms;bl.pos[l]=0;}
+            } ui.force=1;
+        }
+        if((s=enc_take(EN_K4))) {
+            if(sh && t==CK_LOOP) {clk.bars[l]=(uint8_t)clampi((int)clk.bars[l]+s,1,64);memset(clk.take_bars[l],0,sizeof clk.take_bars[l]);}
+            else clk.div[l][t]=(uint8_t)clampi((int)clk.div[l][t]+s,0,t==CK_LOOP?6:5);
+            clock_cancel[l][t]++; ui.force=1;
+        }
+    } else if (ui.filter_page) {
+        if ((s=enc_take(EN_K1))) {
+            if (sh) ui.filter_page=0;
+            else { ui.flt[ui.sel]=(int8_t)clampi(ui.flt[ui.sel]+2*s,-FLT_MAX,FLT_MAX); level_pan_apply(ui.sel); }
+            ui.force=1;
+        }
+        if ((s=enc_take(EN_K2))) { flt_edit[ui.sel][1]=(int8_t)clampi(flt_edit[ui.sel][1]+s,0,101); ui.force=1; }
+        if ((s=enc_take(EN_K3))) { flt_edit[ui.sel][0]=(int8_t)clampi(flt_edit[ui.sel][0]+s,0,3); ui.force=1; }
+        enc_take(EN_K4);
+    } else if (ui.gr_page) {
+        static const uint8_t K[4] = {EN_K1, EN_K2, EN_K3, EN_K4};
+        for (uint32_t j = 0; j < 4u; j++) {
+            s = enc_take(K[j]);
+            if (s && sh && j == 1u) { ui.gr_page = 0; ui.force = 1; break; }
+            if (s) { gr_edit[ui.sel][j] = (int8_t)clampi(gr_edit[ui.sel][j] + s, -100, 100); ui.force = 1; }
+        }
+    } else if (ui.speed_page) {
+        uint32_t l = ui.sel;
+        if ((s = knob_take(EN_K1, sh)) != 0) {
+            uint32_t pct = loop_pct(loop[l].speed_pct);
+            if (loop[l].rate == LS_HALF) pct /= 2u;
+            else if (loop[l].rate == LS_DOUBLE) pct *= 2u;
+            ev_post(EV_LOOP_SPEED, l, LOOP_TRK, (uint32_t)clampi((int32_t)pct + s, 25, 400));
+        }
+        if ((s = knob_take(EN_K2, sh)) != 0)
+            ui.speed_loop = (uint8_t)clampi((int32_t)ui.speed_loop + s, 0, loop[l].ntrk ? loop[l].ntrk - 1 : 0);
+        if ((s = knob_take(EN_K3, sh)) != 0 && ui.speed_loop < loop[l].ntrk)
+            ev_post(EV_LOOP_SPEED, l, ui.speed_loop, (uint32_t)clampi((int32_t)loop_pct(loop[l].trk[ui.speed_loop].speed_pct) + s, 25, 400));
+        enc_take(EN_K4);
+        ui.force = 1;
+    } else if (ui.snap_page) {                          /* the SNAPSHOTS page: KNOB 1 the morph time (its dial); 2 .. 4 nothing */
         if ((s = enc_take(EN_K1)) != 0) {
             ui.morph = (uint8_t)clampi((int32_t)ui.morph + s, 0, MORPH_STEPS);
             ui.morph_until = fm1_ms + 1500u;
@@ -1012,6 +1084,13 @@ static void ui_input(void)
                 ui.env_touch_until = fm1_ms + 1500u;
             }
         }
+    } else if (ui.bl_page && bl.on[ui.sel] && sh && ui.engine[ui.sel]==ENG_ANIMA) {
+        uint32_t l=ui.sel;int changed=0;
+        if((s=enc_take(EN_K1))) {bl_edit_note[l]=(uint8_t)clampi((int)bl_edit_note[l]+s,0,bl.n[l]?bl.n[l]-1:0);changed=1;}
+        if((s=enc_take(EN_K2))) {bl_accent[l][bl_edit_note[l]]=(uint8_t)clampi((int)bl_accent[l][bl_edit_note[l]]+s,0,1);changed=1;}
+        if((s=enc_take(EN_K3))) {bl_slide[l][bl_edit_note[l]]=(uint8_t)clampi((int)bl_slide[l][bl_edit_note[l]]+s,0,1);changed=1;}
+        enc_take(EN_K4);
+        if(changed) {char msg[32];fmt_int(msg,bl_edit_note[l]+1);str_cpy(msg+str_len(msg),bl_accent[l][bl_edit_note[l]]?" ACC":" ---",sizeof msg-str_len(msg));str_cpy(msg+str_len(msg),bl_slide[l][bl_edit_note[l]]?" SLIDE":" -----",sizeof msg-str_len(msg));say(msg,1600);ui.force=1;}
     } else if (ui.bl_page && bl.on[ui.sel]) {    /* BRICKLAYER's page: KNOB 1 .. 4 its */
         static const uint8_t K[4] = {EN_K1, EN_K2, EN_K3, EN_K4};
         uint32_t j;
@@ -1061,14 +1140,17 @@ static void ui_input(void)
         }
     } else {
         s = enc_take(EN_K1);                     /* KNOB 1: the layer's filter; its dial over the screen */
-        if (s) {
+        if (s && sh) { ui.filter_page=1; ui.dial_until=0; ui.force=1; }
+        else if (s) {
             ui.flt[ui.sel] = (int8_t)clampi(ui.flt[ui.sel] + 2 * s, -FLT_MAX, FLT_MAX);
             level_pan_apply(ui.sel);
             ui.dial = DIAL_FLT;
             ui.dial_until = fm1_ms + 1000u;
         }
         s = enc_take(EN_K2);                     /* KNOB 2: the layer's granulator */
-        if (s) {
+        if (s && sh) {
+            ui.gr_page = 1; ui.dial_until = 0; ui.force = 1;
+        } else if (s) {
             ui.gr[ui.sel] = (int8_t)clampi(ui.gr[ui.sel] + 2 * s, -FLT_MAX, FLT_MAX);
             level_pan_apply(ui.sel);
             ui.dial = DIAL_GR;
@@ -1112,12 +1194,13 @@ static void ui_input(void)
         const looper_t *p = &loop[ui.sel];
         char m[12] = "LOOP ";
         ev_post(EV_LOOP_REC, ui.sel, 0, 0);
+        if(clk.mode[ui.sel][CK_LOOP] && p->rec==LR_IDLE) say("ARM NEXT BAR",1200);
         ui.rec_t0 = fm1_ms;
         ui.rec_down = 1;
         ui.rec_done = 0;
         if (p->rec == LR_REC) {                  /* ended: LOOP n */
             fmt_int(m + 5, p->ntrk + 1);
-            say(m, 1200);
+            say(clk.mode[ui.sel][CK_LOOP]?"CLOSE ON BAR":m, 1200);
         } else if (p->rec == LR_IDLE && p->ntrk >= LOOP_TRK)
             say("10 LOOPS", 1500);               /* full: not armed */
         else if (p->rec == LR_IDLE && p->nev >= LOOP_N - 32u)
@@ -1136,7 +1219,7 @@ static void ui_input(void)
             bl.len[ui.sel] = 0;
             bl.pos[ui.sel] = 0;
             bl_release(ui.sel);
-            flash("BRICKS", "EMPTY", LAYER_COL[ui.sel]);
+            flash("BRICKS", "EMPTY", ui_color(ui.sel));
         }
         ui.force = 1;
     }
@@ -1150,7 +1233,7 @@ static void ui_input(void)
         char d[8] = "LOOP  ";
         ui.rec_done = 1;
         d[5] = (char)('1' + ui.sel);
-        flash(d, "EMPTY", LAYER_COL[ui.sel]);
+        flash(d, "EMPTY", ui_color(ui.sel));
     }
     if (btn_bit(press, B_PLAY)) {
         if ((fm1_in.notes >> KEY_SHIFT) & 1u) {  /* SHIFT and PLAY, any layer: every loop and sequencer stops if */
@@ -1171,6 +1254,8 @@ static void ui_input(void)
             rx_set(!rx.on);
             say(rx.on ? RXM_NAME[rx.mode] : RXM_OFF[rx.mode], 1200);
             ui.force = 1;
+        } else if(ui.clock_page && ui.clock_target!=CK_LOOP && !seq_page()) {
+            say("SEQ IS OFF",1000);
         } else if (seq_page()) {                 /* PLAY on a sequencer's page: it starts or stops */
             int run = !(bl.run[ui.sel] || bb.run[ui.sel]);
             bl_set_run(ui.sel, run);
@@ -1280,6 +1365,7 @@ static void ui_input(void)
         char m[8] = "OCT  ";
         int32_t o = clampi(ui.oct[ui.sel] + (btn_bit(press, B_OCTUP) ? 1 : -1), -3, 3);
         ui.oct[ui.sel] = (int8_t)o;
+        ba_register[ui.sel] = (int8_t)o;
         m[4] = o < 0 ? '-' : o > 0 ? '+' : ' ';
         m[5] = (char)('0' + (o < 0 ? -o : o));
         m[6] = 0;
@@ -1305,7 +1391,7 @@ static void ui_input(void)
         if (!ui.rv_page && !ui.mod_page && !ui.rx_page && !ui.sc_page && !ui.env_page && !(ui.bb_page && bb.on[ui.sel]) && !(ui.bl_page && bl.on[ui.sel]) &&
             !ui.pre_page && !ui.ses_page && !ui.snap_page && !ui.ovd) {
             uint32_t e = ui.engine[ui.sel];
-            int32_t n = e == ENG_FM ? FF_N : e == ENG_ANIMA ? AK_N : e == ENG_CAL ? CS_N : e == ENG_RUS ? RK_N
+            int32_t n = e == ENG_FM ? FF_N : e == ENG_ANIMA ? AK_N : e == ENG_CAL ? CS_N : e == ENG_RUS ? FRACT_N
                         : e == ENG_DRUID ? DK_N : e == ENG_BAY ? BK_N : e == ENG_OB ? OBK_N : HK_N;
             int32_t k = clampi(cur_kind(ui.sel) + s, 0, n - 1), d = s > 0 ? 1 : -1;
             while (e == ENG_FM && fm_retired(k) && k + d >= 0 && k + d < n)
@@ -1352,6 +1438,11 @@ static void ui_input(void)
             bl.spd[l] = (uint8_t)(bl.spd[l] == want ? LS_NORMAL : want);
             say(bl.spd[l] == LS_HALF ? "HALF SPEED" : bl.spd[l] == LS_DOUBLE ? "DOUBLE SPEED" : "NORMAL SPEED", 1200);
         }
+    } else if (((ch & keys) >> KEY_HALF & 1u || (ch & keys) >> KEY_DOUBLE & 1u) && !ui.bb_page && !ui.rv_page && !ui.env_page && !ui.mod_page && !ui.rx_page && !ui.sc_page && !ui.snap_page && !ui.ses_page && !ui.pre_page && !ui.set_page && (ui.speed_page || loop[ui.sel].ntrk)) {
+        ui.speed_page = (uint8_t)!ui.speed_page;
+        ui.speed_loop = 0;
+        ui.dial_until = 0;
+        ui.force = 1;
     } else if (loop[ui.sel].play && loop[ui.sel].ntrk) {   /* the chosen track's loops, while they play (stopped or
                                                             * none: the keys do nothing, and say nothing): backwards
                                                             * or PENDULUM (or forwards again); half or double speed */
@@ -1391,7 +1482,8 @@ static void ui_input(void)
                 say("CHORDS OFF", 900);
         }
     }
-    if ((ch & keys) >> KEY_ENV & 1u) {           /* with SHIFT: BRICKLAYER on (its page up) or off */
+    if ((ch & keys) >> KEY_ENV & 1u) {
+        ui.clock_page=ui.acid_page=0;           /* with SHIFT: BRICKLAYER on (its page up) or off */
         if (((keys >> KEY_SHIFT) & 1u) && !bl.on[ui.sel] && bb.on[ui.sel]) {
             say("NOT ALLOWED", 1200);             /* (one sequencer a track: BALLSY there) */
             ui.env_down = 0;
@@ -1399,7 +1491,7 @@ static void ui_input(void)
             bl_toggle(ui.sel);
             ui.bl_page = bl.on[ui.sel];
             if (ui.bl_page)
-                ui.rv_page = ui.ses_page = ui.snap_page = ui.sc_page = ui.pre_page = ui.set_page = ui.env_page = ui.bb_page = 0;
+                ui.filter_page = ui.gr_page = ui.speed_page = ui.rv_page = ui.ses_page = ui.snap_page = ui.sc_page = ui.pre_page = ui.set_page = ui.env_page = ui.bb_page = 0;
             say(bl.on[ui.sel] ? "BRICKLAYER" : "BRICKLAYER OFF", 900);
             ui.force = 1;
             ui.env_down = 0;
@@ -1414,18 +1506,19 @@ static void ui_input(void)
         ui.env_done = 1;
         ui.bl_page = (uint8_t)!ui.bl_page;
         if (ui.bl_page)
-            ui.rv_page = ui.ses_page = ui.snap_page = ui.sc_page = ui.pre_page = ui.set_page = ui.env_page = ui.bb_page = 0;
+            ui.filter_page = ui.gr_page = ui.speed_page = ui.rv_page = ui.ses_page = ui.snap_page = ui.sc_page = ui.pre_page = ui.set_page = ui.env_page = ui.bb_page = 0;
         ui.force = 1;
     }
     if (ui.env_down && !(keys >> KEY_ENV & 1u)) {   /* let go soon: the ENVELOPE page up or down */
         ui.env_down = 0;
         if (!ui.env_done) {
             ui.env_page = (uint8_t)!ui.env_page;
-            ui.rv_page = ui.ses_page = ui.snap_page = ui.sc_page = ui.pre_page = ui.set_page = ui.bb_page = ui.bl_page = 0;
+            ui.filter_page = ui.gr_page = ui.speed_page = ui.rv_page = ui.ses_page = ui.snap_page = ui.sc_page = ui.pre_page = ui.set_page = ui.bb_page = ui.bl_page = 0;
             ui.force = 1;
         }
     }
-    if ((ch & keys) >> KEY_EDIT & 1u) {          /* with SHIFT: the chosen track's balls on (their page up) or off */
+    if ((ch & keys) >> KEY_EDIT & 1u) {
+        ui.clock_page=ui.acid_page=0;          /* with SHIFT: the chosen track's balls on (their page up) or off */
         if (((keys >> KEY_SHIFT) & 1u) && !bb.on[ui.sel] && bl.on[ui.sel]) {
             say("NOT ALLOWED", 1200);             /* (one sequencer a track: BRICKLAYER there) */
             ui.edit_down = 0;
@@ -1433,7 +1526,7 @@ static void ui_input(void)
             bb_toggle(ui.sel);
             ui.bb_page = bb.on[ui.sel];
             if (ui.bb_page)
-                ui.rv_page = ui.ses_page = ui.snap_page = ui.sc_page = ui.pre_page = ui.set_page = ui.env_page = ui.bl_page = 0;
+                ui.filter_page = ui.gr_page = ui.speed_page = ui.rv_page = ui.ses_page = ui.snap_page = ui.sc_page = ui.pre_page = ui.set_page = ui.env_page = ui.bl_page = 0;
             say(bb.on[ui.sel] ? "BALLSY" : "BALLSY OFF", 900);
             ui.force = 1;
             ui.edit_down = 0;
@@ -1448,7 +1541,7 @@ static void ui_input(void)
         ui.edit_done = 1;
         ui.bb_page = (uint8_t)!ui.bb_page;
         if (ui.bb_page)
-            ui.rv_page = ui.ses_page = ui.snap_page = ui.sc_page = ui.pre_page = ui.set_page = ui.env_page = ui.bl_page = 0;
+            ui.filter_page = ui.gr_page = ui.speed_page = ui.rv_page = ui.ses_page = ui.snap_page = ui.sc_page = ui.pre_page = ui.set_page = ui.env_page = ui.bl_page = 0;
         ui.force = 1;
     }
     if (ui.edit_down && !(keys >> KEY_EDIT & 1u)) {   /* let go soon: EDIT on or off */
@@ -1536,7 +1629,8 @@ static void ui_input(void)
                 bl_add(ui.sel, white_ix(k), ui.oct[ui.sel]);
                 ui.force = 1;
             }
-            uint32_t note = scale_note(white_ix(k) + ui.lx + ui.lxt[ui.sel], ui.oct[ui.sel]), bit = 1u << k;
+            uint32_t note = ui.engine[ui.sel]==ENG_BAY ? 48u+(uint32_t)white_ix(k) : scale_note(white_ix(k) + ui.lx + ui.lxt[ui.sel], ui.oct[ui.sel]), bit = 1u << k;
+            if(ui.engine[ui.sel]==ENG_BAY && !ui.bl_page && !ui.bb_page)say(PULSE_NAME[white_ix(k)&15],500);
             ui.key_layer[k] = KEY_NONE;
             if (ui.latch[ui.sel] & bit) {        /* a latched key: SHIFT held lets go of it; alone, nothing */
                 if ((keys >> KEY_SHIFT) & 1u) {
@@ -1600,7 +1694,7 @@ static void ui_leds(void)
                                                       : p->play && p->ntrk);                               /* as its key) */
     }
     fm1_led_key(PANEL_BTN[B_HOME], (int32_t)(ui.home_until - fm1_ms) > 0);
-    fm1_led_key(PANEL_BTN[B_SEQ], ui.rv_page || ui.mod_page || rx_page_up() || (rx.on && (fm1_ms / 600u) & 1u));   /* (PLAY
+    fm1_led_key(PANEL_BTN[B_SEQ], ui.acid_page || ui.clock_page || ui.rv_page || ui.mod_page || rx_page_up() || (rx.on && (fm1_ms / 600u) & 1u));   /* (PLAY
                                                                                       * ALONG on, off its page: a slow blink) */
     fm1_led_key(PANEL_BTN[B_SAVE], ui.set_page || ui.ses_page || ui.snap_page);   /* (GLOBAL SETUP, SESSIONS, SNAPSHOTS up) */
     fm1_led_key(PANEL_BTN[B_ARP], ui.sc_page);
@@ -1616,7 +1710,7 @@ static void ui_leds(void)
                                                                       : w == snap_current() && snap_morph_target() < 0));
             continue;
         }
-        led_dim_key(14u + k, !ui.ovd && w >= 0 && (d % n + n) % n == 0);   /* the scale's root glows (as the loops'
+        led_dim_key(14u + k, !ui.ovd && w >= 0 && (ui.engine[ui.sel]==ENG_BAY ? w%4==0 : (d % n + n) % n == 0));   /* the scale's root glows (as the loops'
                                                                          * transposition moves it) */
         if (ui.ovd)                              /* PLAY held: the loops that play, lit */
             fm1_led_key(14u + k, w >= 0 && (uint32_t)w < loop[ui.sel].ntrk && !((loop[ui.sel].mute >> w) & 1u));
@@ -1656,12 +1750,12 @@ static void ui_leds(void)
 
 /* -------------------------------------------------------------- screen --- */
 #define BAND_A 0                 /* the layer's number */
-#define BAND_B 98                /* its engine */
-#define BAND_C 146               /* its sound, or a message */
-#define BAND_M 192               /* its level: the meter, across */
-#define BAND_D 216               /* its pan, across, at the very bottom */
+#define BAND_B 144                /* its engine */
+#define BAND_C 176               /* its sound, or a message */
+#define BAND_M 202               /* its level: the meter, across */
+#define BAND_D 222               /* its pan, across, at the very bottom */
 #define C_REC RGB(255, 30, 30)
-#define C_SEND RGB(140, 190, 255)
+#define C_SEND ui_color(ui.sel)
 
 /* the battery, top right (0.51, as BIGORNA's build 56): three bars green, two green, one amber, one red when low; a
  * white bolt on a USB host's power (the reading is then the supply's). MELODEE's thresholds; -1 none yet, 4 USB */
@@ -1697,39 +1791,33 @@ static int32_t top_key(void)                     /* (what the top corners show: 
 {
     return (ui.oct[ui.sel] + 3) * 100 + (batt_key() + 1) * 10 + (int32_t)(ui.vary_shown ? ui.vary_shown - 1u : loop[ui.sel].vary);
 }
+#include "living.h"
 static void draw_number(void)
 {
-    char d[2] = {(char)('1' + ui.sel), 0};
+    char d[3] = {'T', (char)('1' + ui.sel), 0};
     ui.shown_top = top_key();
-    CV_AREA(0, BAND_A, 240, BAND_B - BAND_A, C_BLACK) {
-        int32_t x = draw_batt(237, 2 + ((int32_t)FONT_S.h - 10) / 2);
-        cv_text_c(3, &FONT_XL, d, LAYER_COL[ui.sel]);
-        if (ui.oct[ui.sel]) {                    /* the octave, top right, left of the battery: +1, -2 */
-            int32_t o = ui.oct[ui.sel];
-            char t[3] = {o < 0 ? '-' : '+', (char)('0' + (o < 0 ? -o : o)), 0};
-            cv_text(x - text_w(&FONT_S, t), 2, &FONT_S, t, C_WHITE);
+    CV_AREA(0,0,240,BAND_B,C_BLACK) {
+        int32_t x=draw_batt(237,5);
+        cv_text(8,3,&FONT_XS,d,ui_color(ui.sel));
+        if(ui.oct[ui.sel]) {
+            int32_t o=ui.oct[ui.sel];
+            char t[3]={o<0?'-':'+',(char)('0'+(o<0?-o:o)),0};
+            cv_text(x-text_w(&FONT_XS,t),3,&FONT_XS,t,C_WHITE);
         }
-        if (ui.vary_shown ? ui.vary_shown - 1u : loop[ui.sel].vary) {   /* VARY: VAR, top right, under them */
-            cv_text(236 - text_w(&FONT_S, "VAR"), 2 + FONT_S.h + 4, &FONT_S, "VAR", C_WHITE);
-        }
-        if (ui.chord_on[ui.sel]) {               /* chord mode: CHO, top left; the form under it, smaller and dimmer */
-            static const char *const AB[CH_N] = {"TRI", "IN1", "IN2", "SU2", "SU4", "OPN", "4TH"};
-            const char *ab = AB[ui.chord_form[ui.sel] % CH_N];
-            int32_t cw = text_w(&FONT_S, "CHO");
-            cv_text(4, 2, &FONT_S, "CHO", C_WHITE);
-            cv_text(4 + (cw - text_w(&FONT_XS, ab)) / 2, 2 + FONT_S.h + 2, &FONT_XS, ab, RGB(175, 175, 175));   /* (a light grey) */
+        if(ui.vary_shown ? ui.vary_shown-1u : loop[ui.sel].vary)
+            cv_text(8,28,&FONT_XS,"VAR",C_WHITE);
+        if(ui.chord_on[ui.sel]) {
+            static const char *const AB[CH_N]={"TRI","IN1","IN2","SU2","SU4","OPN","4TH"};
+            cv_text(8,51,&FONT_XS,AB[ui.chord_form[ui.sel]%CH_N],C_WHITE);
         }
     }
+    draw_living(1);
 }
 static void draw_engine(void)
 {
-    const char *e = ENG_NAME[ui.engine[ui.sel]];
-    cv_begin(240, 48, C_BLACK);
-    if (text_w(&FONT_L, e) <= (int32_t)cv_w - 4)
-        cv_text_c(2, &FONT_L, e, C_WHITE);
-    else
-        cv_text_fit((48 - FONT_M.h) / 2, &FONT_M, e, C_WHITE);   /* (CALIGULA: too long for the large size) */
-    cv_blit(0, BAND_B);
+    cv_begin(240,BAND_C-BAND_B,C_BLACK);
+    cv_text_fit(0,&FONT_M,ENG_NAME[ui.engine[ui.sel]],ui_color(ui.sel));
+    cv_blit(0,BAND_B);
 }
 /* the message band's size for s: M, or S if even squeezed M will not fit the width */
 static const font_t *band_font(const char *s)
@@ -1741,10 +1829,10 @@ static const font_t *band_font(const char *s)
 static void draw_sound(const char *name, int message)
 {
     static const uint16_t BG[4] = {C_BLACK, C_WHITE, RGB(220, 0, 0), C_BLACK};
-    uint16_t fg = message == 0 ? LAYER_COL[ui.sel] : message == 1 ? C_BLACK : message == 2 ? C_WHITE : RGB(255, 40, 40);
-    const font_t *f = band_font(name);
-    cv_begin(240, 44, BG[message & 3]);
-    cv_text_fit((44 - f->h) / 2, f, name, fg);
+    uint16_t fg = message == 0 ? ui_color(ui.sel) : message == 1 ? C_BLACK : message == 2 ? C_WHITE : RGB(255, 40, 40);
+    const font_t *f = &FONT_XS;
+    cv_begin(240, BAND_M-BAND_C, BG[message & 3]);
+    cv_text_fit((BAND_M-BAND_C - f->h) / 2, f, name, fg);
     cv_blit(0, BAND_C);
 }
 
@@ -1767,14 +1855,14 @@ static void draw_meter(int32_t px)
 {
     int32_t lv = ui.level[ui.sel], mark;
     cv_begin(240, BAND_D - BAND_M - 2, C_BLACK);
-    cv_frame(METER_X - 2, 3, METER_LEN + 4, 16, 2, C_GREY);
+    cv_rect(METER_X, 6, METER_LEN, 5, RGB(40,40,40));
     if (px)
-        cv_rect(METER_X, 5, px, 12, LAYER_COL[ui.sel]);
+        cv_rect(METER_X, 6, px, 5, ui_color(ui.sel));
     if (lv) {                                    /* the level the knob sets: a white bar right across */
         mark = METER_X + meter_px_db10((lv - LEVEL_UNITY) * 15 - 150);   /* where -15 dBFS of one layer lands */
-        cv_rect(mark - 2, 0, 5, 22, C_WHITE);
+        cv_rect(mark - 1, 3, 2, 11, C_WHITE);
     } else
-        cv_rect(METER_X - 2, 0, 5, 22, C_REC);   /* off: red at the left */
+        cv_rect(METER_X, 3, 2, 11, C_REC);   /* off: red at the left */
     cv_blit(0, BAND_M);
     ui.shown_meter = px;
     ui.shown_level = lv;
@@ -1783,18 +1871,15 @@ static void draw_pan(void)
 {
     int32_t pn = ui.pan[ui.sel], x = 120 + pn * 104 / PAN_MAX;   /* the track: x 16 .. 224 */
     cv_begin(240, 240 - BAND_D, C_BLACK);
-    cv_rect(6, 10, 228, 4, C_GREY);
-    cv_rect(6, 4, 3, 16, C_GREY);                /* the ends */
-    cv_rect(231, 4, 3, 16, C_GREY);
-    cv_rect(119, 2, 3, 20, C_WHITE);             /* the middle */
-    cv_rect(x - 9, 0, 18, 24, C_WHITE);          /* the layer's place: its colour, a white edge */
-    cv_rect(x - 6, 3, 12, 18, LAYER_COL[ui.sel]);
+    cv_rect(14,8,212,2,C_GREY);
+    cv_rect(119,4,2,10,C_GREY);
+    cv_rect(x-2,2,4,14,ui_color(ui.sel));
     cv_blit(0, BAND_D);
     ui.shown_pan = pn;
 }
 
 /* the REVERB page: a title, then a row a parameter: its name, its value, a bar under them */
-#define C_DELAY RGB(255, 170, 90)
+#define C_DELAY ui_color(ui.sel)
 /* the MOD page (SEQ's third): the chosen track's modulation, an entry at a time (PRESETS): LFO 1, LFO 2, then the
  * slots MOD A .. D. Four rows, KNOB 1 .. 4 each its own; MOD's fourth row shows what the slot does now */
 static void mod_knob(uint32_t l, uint32_t ix, uint32_t j, int32_t s)
@@ -1829,7 +1914,7 @@ static void mod_knob(uint32_t l, uint32_t ix, uint32_t j, int32_t s)
  * and grey with its bar beside it (0 none, 1 from the left, 2 from the middle; v -100 .. 100), the value under it */
 static void draw_mod_row(uint32_t j, const char *name, const char *val, int bar, int32_t v, int touched)
 {
-    uint16_t bg = touched ? C_WHITE : C_BLACK, fg = touched ? C_BLACK : C_WHITE, col = LAYER_COL[ui.sel];
+    uint16_t bg = touched ? C_WHITE : C_BLACK, fg = touched ? C_BLACK : C_WHITE, col = ui_color(ui.sel);
     cv_begin(240, 47, bg);
     cv_text(6, 0, &FONT_XS, name, touched ? C_BLACK : RGB(175, 175, 175));
     if (bar) {
@@ -1864,7 +1949,7 @@ static void draw_mod_page(void)
             ti[4] = (char)('A' + ix - 2u);
         }
         cv_begin(240, 52, C_BLACK);
-        cv_text_c(3, &FONT_L, ti, LAYER_COL[l]);   /* (in the track's colour: the chosen track's modulation) */
+        cv_text_c(3, &FONT_L, ti, ui_color(l));   /* (in the track's colour: the chosen track's modulation) */
         cv_blit(0, 0);
     }
     if (ix < 2u) {
@@ -1909,10 +1994,9 @@ static void draw_mod_page(void)
     }
 }
 
-#define C_REACT RGB(0, 255, 170)        /* (REACT: a sea green) */
-#define C_SHADOW RGB(150, 200, 255)     /* (SHADOW: a pale blue) */
-#define C_ARPEG RGB(200, 255, 80)       /* (ARPEGGIO: a lime) */
-static const uint16_t RXM_COL[RXM_N] = {C_REACT, C_SHADOW, C_ARPEG};
+#define C_REACT ui_color(ui.sel)
+#define C_SHADOW ui_color(ui.sel)
+#define C_ARPEG ui_color(ui.sel)
 /* the PLAY ALONG page: the mode's name (in its colour while on, grey while off); the name of the knob turned last
  * (as large as fits whole) and its value, large; then a bar for each knob -- KNOB 1 .. 4 in a row; ARPEGGIO's six
  * in two rows of three (SELECT and ALGORITHM the last two) -- the one turned last black on white */
@@ -1927,7 +2011,7 @@ static void draw_rx_page(void)
     const font_t *f;
     const int8_t *kv = rx_kv();
     const char *const *kn = rx_kn();
-    uint16_t col = RXM_COL[rx.mode];
+    uint16_t col = ui_color(ui.sel);
     uint32_t nk = rx_nk();
     if (!ui.force && ui.shown_page == 13 && rx_shown[6] == (int8_t)rx_focus && !memcmp(rx_shown, kv, nk) &&
         rx_shown[7] == (int8_t)rx.mode && rx_shown[8] == (int8_t)rx.on && str_eq(rx_shown_msg, m))
@@ -2000,7 +2084,7 @@ static void draw_rv_row(uint32_t j, int touched)
 {
     char v[12];
     const int8_t *pv = ui.fx ? ui.dlp : ui.rvp;
-    uint16_t bg = touched ? C_WHITE : C_BLACK, fg = touched ? C_BLACK : C_WHITE;
+    uint16_t bg = touched ? ui_color(ui.sel) : C_BLACK, fg = touched ? C_BLACK : C_WHITE;
     cv_begin(240, 47, bg);
     {
         const char *name = ui.fx ? DL_NAME[j] : RV_NAME[j];
@@ -2025,7 +2109,7 @@ static void draw_rv_row(uint32_t j, int touched)
         } else
             fmt_int(v, pv[j]);
         cv_text(6, y, f, name, fg);
-        cv_text(234 - text_w(f, v), y, f, v, fg);
+        cv_text(234 - text_w(f, v), y, f, v, touched ? C_BLACK : ui_color(ui.sel));
     }
     cv_rect(6, 38, 228, 6, touched ? C_GREY : RGB(60, 60, 60));
     cv_rect(6, 38, pv[j] * 228 / 100, 6, touched ? C_BLACK : ui.fx ? C_DELAY : C_SEND);
@@ -2098,7 +2182,7 @@ static void draw_env_page(void)
     const int8_t *v = env_shown();
     uint32_t j, on = ui.env_on[ui.sel][ui.engine[ui.sel]];
     int32_t t = (int32_t)(ui.env_touch_until - fm1_ms) > 0 ? ui.env_touched : -1, x, y, yp = ENV_GB;
-    uint16_t col = on ? LAYER_COL[ui.sel] : C_GREY;
+    uint16_t col = on ? ui_color(ui.sel) : C_GREY;
     int ch = ui.force || ui.shown_env_on != on || ui.shown_env_touch != t;
     for (j = 0; j < 4u; j++)
         ch |= ui.shown_env[j] != v[j];
@@ -2108,7 +2192,7 @@ static void draw_env_page(void)
         char d[12] = "ENVELOPE  ";
         d[9] = (char)('1' + ui.sel);
         cv_begin(240, 36, C_BLACK);
-        cv_text_c(5, &FONT_S, d, LAYER_COL[ui.sel]);
+        cv_text_c(5, &FONT_S, d, ui_color(ui.sel));
         cv_blit(0, 0);
     }
     CV_AREA(0, 36, 240, 104, C_BLACK) {
@@ -2146,7 +2230,7 @@ static void draw_env_page(void)
 
 /* the SCALE page: the title; the root, very large; the scale's name, one or two lines. What was just turned
  * is drawn black on white for a moment */
-#define C_SCALE RGB(255, 196, 90)
+#define C_SCALE ui_color(ui.sel)
 static void draw_sc_page(void)
 {
     int32_t t = (int32_t)(ui.sc_touch_until - fm1_ms) > 0 ? ui.sc_touched : -1;
@@ -2212,12 +2296,11 @@ static int32_t dial_value(void)
 }
 static void draw_dial(void)
 {
-    static const int32_t BAND[3][2] = {{0, 112}, {112, 112}, {224, 16}};
     static const char *const NAME[6] = {"FILTER  ", "GRAIN  ", "REVERB  ", "CRUSH  ", "DELAY  ", "DISTORTION  "};
-    int32_t v = dial_value(), b, k, from, to;    /* the arc lit, in steps of 3 degrees from 12 o'clock */
+    int32_t v = dial_value(), k, from, to;    /* the arc lit, in steps of 3 degrees from 12 o'clock */
     uint32_t av;
     char t[16], m[16];
-    uint16_t col = LAYER_COL[ui.sel];
+    uint16_t col = ui_color(ui.sel);
     const font_t *tf;
     if (ui.dial >= DIAL_MAC) {                   /* EDIT's macro: its name for this sound, and the layer */
         str_cpy(t, mac_name(ui.sel, (ui.dial - DIAL_MAC) & 3u), sizeof t - 2);
@@ -2280,27 +2363,18 @@ static void draw_dial(void)
         to = from;
         from = x_;
     }
-    for (b = 0; b < 3; b++) {
-        int32_t oy = BAND[b][0], x, y;
-        CV_AREA(0, (uint32_t)oy, 240, (uint32_t)BAND[b][1], C_BLACK) {
-        cv_text(((int32_t)cv_w - text_w(tf, t)) / 2, 2 + ((int32_t)FONT_M.h - (int32_t)tf->h) / 2 - oy, tf, t, col);
-        for (k = -45; k <= 45; k++) {            /* the track, every 3 degrees */
-            dial_at((uint32_t)(k * 35791394), DIAL_R, &x, &y);
-            dial_dot(oy, x, y, 4, C_GREY);
+    t[str_len(t)-2]=0;
+    CV_AREA(0,0,240,240,C_BLACK) {
+        char track[3]={'T',(char)('1'+ui.sel),0};
+        cv_text(8,3,&FONT_XS,track,col);
+        cv_text_c(30,tf,t,col);
+        for(k=-45;k<=45;k+=3){
+            int32_t x,y,xx,yy;uint32_t ang=(uint32_t)(k*35791394);
+            dial_at(ang,67,&x,&y);dial_at(ang,73,&xx,&yy);
+            living_line(x,y,xx,yy,v && k>=from && k<=to?col:RGB(64,64,64));
         }
-        if (v)                                   /* the way it is turned */
-            for (k = from; k <= to; k++) {
-                dial_at((uint32_t)(k * 35791394), DIAL_R, &x, &y);
-                dial_dot(oy, x, y, 7, col);
-            }
-        for (k = 0; k <= DIAL_R - 16; k += 4) {  /* the pointer */
-            dial_at(av, k, &x, &y);
-            dial_dot(oy, x, y, 4, C_WHITE);
-        }
-        dial_dot(oy, DIAL_CX, DIAL_CY, 10, C_WHITE);
-        if (b >= 1)
-            cv_text_fit(200 - oy, &FONT_M, m, v ? C_WHITE : C_GREY);
-        }
+        {int32_t x,y;dial_at(av,70,&x,&y);cv_rect(x-2,y-2,5,5,C_WHITE);}
+        cv_text_c(110,text_fit_font(&FONT_M,m,118),m,v?col:C_GREY);
     }
     ui.shown_dial = (int16_t)(v + ui.dial * 256);
     ui.dial_drawn_at = fm1_ms;
@@ -2381,7 +2455,7 @@ static void cv_text_in(int32_t x, int32_t w, int32_t band_h, const char *t, uint
 static const char *kind_name(uint32_t e, int32_t k)
 {
     return e == ENG_FM ? FF_NAME[k % FF_N] : e == ENG_ANIMA ? AK_NAME[k % AK_N] : e == ENG_CAL ? CS_NAME[k % CS_N]
-           : e == ENG_RUS ? RK_NAME[k % RK_N] : e == ENG_DRUID ? DK_NAME[k % DK_N]
+           : e == ENG_RUS ? RK_NAME[k % FRACT_N] : e == ENG_DRUID ? DK_NAME[k % DK_N]
            : e == ENG_BAY ? BK_NAME[k % BK_N] : e == ENG_OB ? OBK_NAME[k % OBK_N] : HK_NAME[k % HK_N];
 }
 /* engine e's preset in slot: its family's name and its number among that engine's presets of the family, in the
@@ -2394,6 +2468,7 @@ static void pre_name(uint32_t e, uint32_t slot, char *b, uint32_t nb)
         str_cpy(b, "EMPTY", nb);
         return;
     }
+    if (e == ENG_BAY && slot == 1) { str_cpy(b, "KANAGAWA", nb); return; }
     for (s = 1; s < slot; s++)
         n += pre_kind(e, s) == k;
     str_cpy(b, kind_name(e, k), nb);
@@ -2460,7 +2535,7 @@ static void draw_ovd_page(void)
     t[6] = (char)('1' + ui.sel);
     t[7] = 0;
     cv_begin(240, 52, C_BLACK);
-    cv_text_c((52 - FONT_M.h) / 2, &FONT_M, p->ntrk ? t : "NO LOOPS", LAYER_COL[ui.sel]);
+    cv_text_c((52 - FONT_M.h) / 2, &FONT_M, p->ntrk ? t : "NO LOOPS", ui_color(ui.sel));
     cv_blit(0, 0);
     for (r = 0; r < 2u; r++)
         CV_AREA(0, 52 + 94 * r, 240, 94, C_BLACK)
@@ -2473,8 +2548,8 @@ static void draw_ovd_page(void)
                 continue;
             fmt_int(n, (int32_t)k + 1);
             if (!((p->mute >> k) & 1u)) {
-                cv_rect(x, 6, 43, 82, LAYER_COL[ui.sel]);
-                cv_bg_set(LAYER_COL[ui.sel]);
+                cv_rect(x, 6, 43, 82, ui_color(ui.sel));
+                cv_bg_set(ui_color(ui.sel));
                 cv_text(x + (43 - text_w(f, n)) / 2, 6 + (82 - f->h) / 2, f, n, C_BLACK);
                 cv_bg_set(C_BLACK);
             } else {
@@ -2578,8 +2653,42 @@ static void draw_morph_dial(void)
     }
 }
 
+static void draw_clock_page(void) {
+    static const char *const target[3]={"LOOPS","BALLSY","BRICKLAYER"};
+    uint32_t l=ui.sel,t=ui.clock_target;
+    if(!ui.force && ui.shown_page==19) return;
+    CV_AREA(0,0,240,240,C_BLACK) {
+        char n[24];
+        str_cpy(n,"CLOCK T",sizeof n);fmt_int(n+str_len(n),l+1);
+        cv_text_c(8,&FONT_M,n,ui_color(l));
+        fmt_int(n,clk.bpm);str_cpy(n+str_len(n)," BPM",sizeof n-str_len(n));
+        cv_text_c(48,&FONT_L,n,C_WHITE);
+
+        cv_text_c(123,&FONT_M,target[t],ui_color(l));
+        cv_text_c(164,&FONT_M,clk.mode[l][t]?"SYNC":"FREE",C_WHITE);
+        cv_text_c(199,&FONT_S,clock_label[clk.div[l][t]],clk.mode[l][t]?ui_color(l):C_GREY);
+        if(t==CK_LOOP) {fmt_int(n,clk.bars[l]);str_cpy(n+str_len(n)," BARS  SHIFT+K4",sizeof n-str_len(n));cv_text_c(224,&FONT_XS,n,C_GREY);}
+    }
+    ui.shown_page=19;ui.force=0;
+}
 static void ui_draw(void)
 {
+    cv_dust_off=1; /* clean black during performance; splash keeps its own texture */
+    if(ui.acid_page) {
+        if(ui.force || ui.shown_page!=20) {
+            CV_AREA(0,0,240,240,C_BLACK) {
+                static const char *const names[4]={"WAVE","ACCENT","SLIDE MS","DRIVE"};
+                static const char *const waves[3]={"PRESET","SAW","SQUARE"};char v[20];
+                cv_text_c(6,&FONT_S,"ACID",ui_color(ui.sel));
+                for(uint32_t j=0;j<4;j++) {int y=38+j*49;char key[3]={'K',(char)('1'+j),0};
+                    cv_text(8,y,&FONT_XS,key,C_GREY);cv_text(38,y,&FONT_XS,names[j],C_WHITE);
+                    if(!j)str_cpy(v,waves[acid_edit[ui.sel][0]],sizeof v);else fmt_int(v,acid_edit[ui.sel][j]);
+                    cv_text(230-text_w(&FONT_S,v),y+19,&FONT_S,v,ui_color(ui.sel));
+                    if(j){int32_t max=j==2?500:100;cv_rect(38,y+29,85,3,RGB(40,40,40));cv_rect(38,y+29,clampi(acid_edit[ui.sel][j]*85/max,0,85),3,ui_color(ui.sel));}}
+            } ui.force=0;ui.shown_page=20;
+        } return;
+    }
+    if(ui.clock_page) {draw_clock_page();return;}
     const char *name = sound_name(ui.sel, ui.engine[ui.sel]);
     int msg = (int32_t)(ui.msg_until - fm1_ms) > 0;
     const char *c = msg ? ui.msg : name;
@@ -2626,12 +2735,76 @@ static void ui_draw(void)
         return;
     }
     if ((int32_t)(ui.dial_until - fm1_ms) > 0 && !ui.ses_page && !ui.snap_page && !ui.sc_page && !ui.rv_page && !ui.pre_page && !ui.ovd &&
-        !ui.env_page) {
+        !ui.env_page && !ui.filter_page && !ui.gr_page) {
         if (ui.shown_page != 4 ||
             (ui.shown_dial != (int16_t)(dial_value() + ui.dial * 256) && (uint32_t)(fm1_ms - ui.dial_drawn_at) >= 40u))
             draw_dial();
         ui.shown_page = 4;
         ui.shown_ses = 0;
+        return;
+    }
+    if (ui.filter_page) {
+        static const char *const type[4]={"DJ", "LOW PASS", "HIGH PASS", "BAND PASS"};
+        if (ui.force || ui.shown_page != 18) {
+            CV_AREA(0,0,240,240,C_BLACK) {
+                char n[16]; uint32_t l=ui.sel;
+                cv_text_c(8,&FONT_M,"FILTER",ui_color(l));
+                cv_text(12,57,&FONT_S,"CUTOFF",C_WHITE);
+                if (flt_edit[l][0]) {
+                    fmt_int(n,(int32_t)exp2_q16(262144+(ui.flt[l]+FLT_MAX)*673861/(2*FLT_MAX)-(16<<16)));
+                    str_cpy(n+str_len(n)," HZ",4);
+                } else fmt_int(n,ui.flt[l]);
+                cv_text(228-text_w(&FONT_XS,n),60,&FONT_XS,n,ui_color(l));
+                cv_text(12,103,&FONT_S,"RESONANCE",C_WHITE);
+                if (flt_edit[l][1]) fmt_int(n,flt_edit[l][1]-1); else str_cpy(n,"AUTO",sizeof n);
+                cv_text(228-text_w(&FONT_XS,n),106,&FONT_XS,n,ui_color(l));
+                cv_text(12,149,&FONT_S,"TYPE",C_WHITE);
+                cv_text(228-text_w(&FONT_XS,type[(uint32_t)flt_edit[l][0]]),152,&FONT_XS,type[(uint32_t)flt_edit[l][0]],ui_color(l));
+
+
+            }
+        }
+        ui.shown_page=18; ui.force=0; return;
+    }
+    if (ui.gr_page) {
+        if (!ui.force && ui.shown_page == 17) return;
+        static const char *const label[4] = {"SIZE", "DENSITY", "SCATTER", "FEEDBACK"};
+        CV_AREA(0, 0, 240, 240, C_BLACK) {
+            cv_rect(8, 8, 3, 20, ui_color(ui.sel));
+            cv_text_c(8, &FONT_M, "GRAINS", C_WHITE);
+            for (uint32_t j = 0; j < 4u; j++) {
+                int32_t y = 46 + 44 * (int32_t)j, v = gr_edit[ui.sel][j];
+                char n[8]; fmt_int(n, v);
+                cv_text(12, y + 5, &FONT_S, label[j], C_WHITE);
+                cv_text(228 - text_w(&FONT_M, n), y, &FONT_M, n, ui_color(ui.sel));
+                cv_rect(12, y + 29, 216, 1, C_GREY);
+                cv_rect(120, y + 26, 1, 7, C_WHITE);
+                cv_rect(12 + (v + 100) * 214 / 200, y + 26, 2, 7, ui_color(ui.sel));
+            }
+            cv_text_c(224, &FONT_XS, "0 = ORIGINAL", C_GREY);
+        }
+        ui.shown_page = 17; ui.force = 0;
+        return;
+    }
+    if (ui.speed_page) {
+        uint32_t l = ui.sel, k = ui.speed_loop;
+        char v[24];
+        uint32_t pct = loop_pct(loop[l].speed_pct);
+        if (loop[l].rate == LS_HALF) pct /= 2u;
+        else if (loop[l].rate == LS_DOUBLE) pct *= 2u;
+        CV_AREA(0, 0, 240, 240, C_BLACK) {
+        cv_text_c(8, &FONT_M, "LOOP SPEED", C_WHITE);
+        cv_text_c(48, &FONT_S, "TRACK", ui_color(l));
+        fmt_int(v, (int32_t)pct); str_cpy(v + str_len(v), "%", 2);
+        cv_text_c(70, &FONT_L, v, C_WHITE);
+        str_cpy(v, "LOOP ", sizeof v); fmt_int(v + 5, loop[l].ntrk ? (int32_t)k + 1 : 0);
+        cv_text_c(124, &FONT_S, v, ui_color(l));
+        if (k < loop[l].ntrk) { fmt_int(v, (int32_t)loop_pct(loop[l].trk[k].speed_pct)); str_cpy(v + str_len(v), "%", 2); }
+        else str_cpy(v, "EMPTY", sizeof v);
+        cv_text_c(146, &FONT_L, v, C_WHITE);
+
+        }
+        ui.shown_page = 16; ui.force = 0;
         return;
     }
     if (ui.ovd) {
@@ -2718,7 +2891,7 @@ static void ui_draw(void)
         c = lp;
         msg = st == LR_REC ? 2 : (fm1_ms / 250u) & 1u ? 2 : 3;
     }
-    if (ui.force || ui.shown_sel != ui.sel || ui.shown_top != top_key()) {
+    if (ui.force || ui.shown_sel != ui.sel || ui.shown_eng != ui.engine[ui.sel] || ui.shown_top != top_key()) {
         draw_number();
         ui.shown_sel = ui.sel;
         ui.shown_eng = ui.shown_msg = ui.shown_pan = ui.shown_level = -100;   /* the rest follows the layer */
@@ -2733,6 +2906,7 @@ static void ui_draw(void)
         str_cpy(ui.shown_text, c, sizeof ui.shown_text);
         ui.shown_msg = msg;
     }
+    draw_living(ui.force);
     px = meter_px(lay[ui.sel].meter);
     if (ui.shown_level != ui.level[ui.sel] || ((uint32_t)(fm1_ms - ui.meter_at) >= 30u && px != ui.shown_meter)) {
         draw_meter(px);

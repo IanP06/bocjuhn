@@ -1,0 +1,63 @@
+bocjuhn 1.0 RC3 — Polvo / DROPLETS para FM1
+
+ARCHIVO PARA INSTALAR: bocjuhn-1.0-rc3.fwsc
+Identidad de actualización: FM-1_197100. Versión: B103.
+Compilación y pruebas por software; esta RC3 aún requiere validación en el FM1.
+No se escribió firmware ni se modificaron datos de tu unidad desde esta preparación.
+
+INSTALACIÓN
+1. Conserva un backup de tus sesiones/memoria de INTERVAL antes de actualizar.
+2. Conecta el FM1 cargado con USB de datos. Cierra otras aplicaciones MIDI.
+3. Abre http://127.0.0.1:8766/install en Chrome o Edge.
+   Si hace falta iniciar el servidor: ejecuta node serve.cjs en la carpeta del proyecto.
+4. La página verifica identidad, estructura, tamaño y SHA-256 del paquete.
+   Read device identity consulta la unidad sin escribir. Luego Install RC3 inicia
+   la carga tras la confirmación del instalador. Espera el reinicio sin desconectar.
+5. El arranque debe mostrar bocjuhn, created by ryuji kanagawa y argentina, 2026.
+
+CAMBIOS Y CONTROLES
+CALIGULA pasa a DROPLETS: DENSITY, COLOR, RESONANCE, SPREAD.
+Motor original ligero inspirado en Particles; no es un port completo de Plaits.
+PULSE permanece como RYUJI, primer preset KANAGAWA, macros STRUCTURE, DAMPING,
+BRIGHTNESS, POSITION; conserva las correcciones ADSR y de octavas.
+EDIT OFF: SHIFT+K1 abre FILTER. K1 cutoff, K2 resonancia, K3 tipo DJ/LP/HP/BP.
+SHIFT+K1 vuelve. AUTO conserva la resonancia original; 0–100 la ajusta independiente.
+SHIFT+K2 conserva GRAINS; SHIFT+K3 distortion; SHIFT+K4 delay send.
+Se mantiene el dial grande temporal y la pantalla normal al quedar inactivo.
+BALLSY conserva tamaño y distribución originales; solo cambian colores.
+
+ESTABILIDAD
+Se reserva presupuesto antes de admitir nuevos disparos. Cuando no alcanza,
+se reutiliza una cola compatible o se omite el nuevo disparo. No hay un límite
+arbitrario de dos secuenciadores. Las órdenes de soltar notas tienen recuperación
+si se llena la cola de eventos. Las voces en fade no se consideran CPU libre.
+Se recuperan 9.216 bytes de delay interno al reemplazar CALIGULA.
+El coste real y el margen de CPU deben comprobarse en tu FM1; las pruebas del
+host y el modelo de carga no equivalen a esa medición.
+
+PRUEBA EN TU UNIDAD
+Comienza con volumen moderado. Comprueba cada motor, OCT +/- y ADSR de RYUJI.
+Prueba DROPLETS con notas cortas, RESONANCE de mínimo a máximo y SPREAD.
+Repite tu combinación exigente gradualmente: 1, 2 y 3 BALLSY, varias bolas,
+chords, efectos y mod matrix. Observa cortes frente a omisión de nuevos disparos.
+Guarda una sesión con filtro editado y una escena, reinicia y verifica su recall.
+
+DATOS Y VUELTA ATRÁS
+Esta versión lee INT2/32769 de INTERVAL y guarda INT2/32770. CALIGULA se convierte
+a DROPLETS: no conserva su timbre anterior. Los ajustes nuevos de filtro se
+conservan en sesiones y escenas. No asumir compatibilidad de sesiones nuevas
+con versiones anteriores ni con TONITOR original. Reinstalar no restaura datos.
+Se incluyen interval-1.0-rc2-rollback.fwsc y tonitor-original-build68.fwsc sin
+modificar como paquetes de retorno. Para volver a INTERVAL, usar el primero.
+La entrega anterior INTERVAL RC2 sigue disponible en release/interval-1.0-rc2.
+Si la unidad responde por MIDI, se puede usar el protocolo original de actualización
+para reinstalar un paquete compatible. Si falla, guarda el error y no improvises
+borrados: si Windows muestra WL82 UBOOT1.00, cancela cualquier pedido de formato.
+
+CONTENIDO
+manifest.json: identidad, memoria, procedencia y estado de validación.
+SHA256SUMS.txt: huellas de firmware, fuentes y ejemplos.
+source.zip: fuentes correspondientes. DESIGN.md: comportamiento y límites.
+checks.txt y sound-checks.txt: resultados de pruebas.
+Los WAV provienen del DSP real ejecutado en el host, no de una grabación del FM1.
+Un backup .bin del simulador no es firmware y no debe cargarse como .fwsc.

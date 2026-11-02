@@ -75,6 +75,15 @@ typedef struct {
 typedef char snap_t_is_604[sizeof(snap_t) == 604u ? 1 : -1];   /* (sessions keep it as it is: a new layout, a new format) */
 
 static snap_t snap_s[NSNAP] POOL;
+/* Separate from snap_t so upstream format-27 snapshots retain their binary layout.
+ * Clocks change with the loop set at the morph midpoint, preserving their notes. */
+static uint16_t snap_speed[NSNAP][NLAYER][LOOP_TRK + 1u] POOL;
+static uint16_t morph_speed[NLAYER][LOOP_TRK + 1u];
+static int8_t snap_gr[NSNAP][NLAYER][4], morph_gr[NLAYER][4];
+static uint8_t snap_art[NSNAP][NLAYER][2][BL_MAX] POOL;
+static clock_config snap_clock[NSNAP] POOL;
+static int16_t snap_acid[NSNAP][NLAYER][4] POOL;
+static int8_t snap_filter[NSNAP][NLAYER][2], morph_filter[NLAYER][2];
 static snd_ent_t snd_tab[SND_N];
 static lat_ent_t lat_tab[LAT_N + 1u];   /* (entry 0: none) */
 static bln_ent_t bln_tab[BLN_N + 1u];
@@ -560,6 +569,12 @@ static void snap_discrete(const snap_t *b, uint32_t mask)
             bl_set_run(l, t->bl >> 1 & 1u);
         snap_latches(l, &lat_tab[t->lat]);
         snap_loops(l, t);                        /* the loops: which, in or out, playing or not */
+        memcpy(gr_edit[l], morph_gr[l], 4);
+        memcpy(flt_edit[l], morph_filter[l], 2);
+        ev_post(EV_LOOP_SPEED, l, LOOP_TRK, loop_pct(morph_speed[l][0]));
+        for (k = 0; k < t->ntrk; k++)
+            ev_post(EV_LOOP_SPEED, l, k, loop_pct(morph_speed[l][k + 1u]));
+        ses_events_drain();
         if (lp->dmode != (t->loop >> 1 & 3u))
             ev_post(EV_LOOP_MODE, l, 0, t->loop >> 1 & 3u);
         if (lp->rate != (t->loop >> 3 & 3u))
@@ -779,6 +794,15 @@ static int snap_store(uint32_t i)
     if (!snap_capture(&s, 1))
         return 0;
     snap_s[i] = s;
+    memcpy(snap_gr[i], gr_edit, sizeof gr_edit);
+    memcpy(snap_filter[i], flt_edit, sizeof flt_edit);
+    for(uint32_t l=0;l<NLAYER;l++){memcpy(snap_art[i][l][0],bl_accent[l],BL_MAX);memcpy(snap_art[i][l][1],bl_slide[l],BL_MAX);}
+    snap_clock[i]=clk;memcpy(snap_acid[i],acid_edit,sizeof acid_edit);
+    for (uint32_t l = 0; l < NLAYER; l++) {
+        snap_speed[i][l][0] = loop[l].speed_pct;
+        for (uint32_t k = 0; k < LOOP_TRK; k++)
+            snap_speed[i][l][k + 1u] = loop[l].trk[k].speed_pct;
+    }
     snap.used |= (uint16_t)(1u << i);
     snap.cur = (int8_t)i;
     snap.loop_dirty = (uint8_t)((1u << NLAYER) - 1u);
@@ -791,8 +815,15 @@ static void snap_recall(uint32_t i, uint32_t morph_half_s)
     if (i >= NSNAP || !((snap.used >> i) & 1u))
         return;
     morph_end();
+    for(uint32_t l=0;l<NLAYER;l++){memcpy(bl_accent[l],snap_art[i][l][0],BL_MAX);memcpy(bl_slide[l],snap_art[i][l][1],BL_MAX);}
+    clk=snap_clock[i];clock_sanitize(&clk);memcpy(acid_edit,snap_acid[i],sizeof acid_edit);
+    for(uint32_t l=0;l<NLAYER;l++)for(uint32_t k=0;k<4;k++)acid_edit[l][k]=(int16_t)clampi(acid_edit[l][k],0,k==0?2:k==2?500:100);
+    for(uint32_t c=0;c<NLAYER;c++)for(uint32_t t=0;t<3;t++)clock_cancel[c][t]++;
     memset(snap_pend, 0, sizeof snap_pend);
     morph_b = snap_s[i];                         /* (a copy: stored over on the way, it still goes where it went) */
+    memcpy(morph_speed, snap_speed[i], sizeof morph_speed);
+    memcpy(morph_gr, snap_gr[i], sizeof morph_gr);
+    memcpy(morph_filter, snap_filter[i], sizeof morph_filter);
     for (l = 0; l < NLAYER; l++) {
         memcpy(morph_ma[l], ui.mac[l][ui.engine[l]], NMAC);
         memcpy(morph_ea[l], ui.env[l][ui.engine[l]], 4u);
@@ -834,6 +865,11 @@ static int snap_current(void) { return snap.cur; }
 static void snap_reset(void)
 {
     morph_end();
+    memset(snap_speed, 0, sizeof snap_speed);
+    memset(snap_gr, 0, sizeof snap_gr);
+    memset(snap_art,0,sizeof snap_art);
+    memset(snap_filter, 0, sizeof snap_filter);
+    for(uint32_t i=0;i<NSNAP;i++){snap_clock[i]=clk;memcpy(snap_acid[i],acid_edit,sizeof acid_edit);}
     memset(snap_pend, 0, sizeof snap_pend);
     snap.used = 0;
     snap.cur = -1;

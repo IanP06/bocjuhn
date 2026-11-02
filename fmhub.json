@@ -1,0 +1,8 @@
+{
+  "what": "Six tracks for sound exploration, free loops and clocked play. Eight engines including ACID, DROPLETS and FRACT, with granular processing, modulation, effects and animated organisms. Based on Tonitor, with its performance workflow preserved.",
+  "author": "ryuji kanagawa",
+  "kinds": ["synth"],
+  "image": "docs/card.png",
+  "play": "https://ianp06.github.io/bocjuhn/",
+  "cheat": "https://github.com/IanP06/bocjuhn/blob/codex/living-rc6/ACID-CLOCK-RC5.txt"
+}

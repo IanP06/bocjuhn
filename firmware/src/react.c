@@ -164,7 +164,7 @@ static void rx_play(uint32_t l, uint32_t note, uint32_t vel, uint32_t len, uint3
     uint32_t i, slot = RX_Q;
     if (note > 127u || !rx_in_ens(l))
         return;
-    note = rx_snap(note);                           /* (in the scale, whatever came: the last word) */
+    note = ui.engine[l]==ENG_BAY ? 48u+((note-48u)&15u) : rx_snap(note);                           /* (in the scale, whatever came: the last word) */
     for (i = 0; i < RX_Q; i++)
         if (!rx.q[i].on) {
             slot = i;

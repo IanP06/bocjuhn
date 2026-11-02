@@ -1,0 +1,9 @@
+* text=auto eol=lf
+*.fwsc binary
+*.wasm binary
+*.png binary
+*.jpg binary
+*.ttf binary
+*.wav binary
+*.zip binary
+release/** -text

@@ -28,9 +28,10 @@
  * note the loop is playing, nor the loop a note a key holds. The keys go on playing the layer over its loop. */
 
 #define NLAYER 6
+#include "clock.h"
 #define NVOICE 12                /* the voices of all the layers (FM and ANIMA) */
 enum { ENG_FM, ENG_ANIMA, ENG_CAL, ENG_RUS, ENG_DRUID, ENG_BAY, ENG_HIVE, ENG_OB, NENG };
-static const char *const ENG_NAME[NENG] = {"FM", "ANIMA", "CALIGULA", "RUSSOLO", "DRUID", "BAYAREA", "HIVE", "OBRADOR"};
+static const char *const ENG_NAME[NENG] = {"FM", "ACID", "DROPLETS", "FRACT", "DRUID", "RYUJI", "HIVE", "OBRADOR"};
 #include "midi.c"                /* (the MIDI settings, the notes sent out) */
 
 static fm_patch_t fm_buf[NLAYER][2];
@@ -72,7 +73,7 @@ static void hv_measure(hv_design_t *d) { hv_measure_on(d, (hv_voice_t *)(void *)
                                                                                                * never both at once) */
 
 #define FADE 12u                 /* blocks of a fade (~9 ms) */
-enum { SRC_KEY, SRC_LOOP };      /* who plays a note: the keys (and MIDI), or the looper */
+enum { SRC_KEY, SRC_LOOP, SRC_CLOCK };      /* who plays a note: the keys (and MIDI), or the looper */
 typedef struct {
     uint8_t note, gate, src;     /* the note, held, by whom */
     uint8_t sounding;            /* the voice renders */
@@ -107,6 +108,7 @@ typedef struct {
  * release a curve to -60 dB; on CALIGULA and RUSSOLO the organism held through the release, then let go */
 static volatile int8_t lay_env[NLAYER][4];
 static volatile uint8_t lay_env_on[NLAYER];
+static volatile int8_t ba_register[NLAYER]; /* whole RYUJI track, including held notes / loops */
 enum { AE_OFF, AE_ATT, AE_DEC, AE_REL, AE_DONE };
 static const int32_t ENV_BASE[4] = {1, 5, 0, 5};          /* ms at 0 */
 static const int32_t ENV_OCT[4] = {8708, 7187, 0, 7842};  /* log2 of the range (x 10000, 2000, -, 4000) x 2^16 / 100 */
@@ -175,6 +177,7 @@ static uint32_t host_cost_clock, host_cost_model[8];
 #define QUICK 8u                         /* blocks of the budget's fade (~6 ms: the quietest tail, so no click) */
 static uint32_t eng_cost[8];             /* a voice (an organism) of each engine: its usual cost, ticks */
 static uint32_t org_cost[NLAYER];        /* each layer's organism, last block */
+static uint32_t overload_skipped;
 static uint32_t blk_last, blk_new;       /* the last block's cost; what has just started since */
 static voice_t vox[NVOICE];
 /* the layer a voice's note (note, gate, src) is of: while it fades to be taken, the one it goes to */
@@ -188,6 +191,8 @@ typedef struct {
     int32_t g, pl, pr, sd, dsd;  /* the level, the pan and the sends as the last block ended (they glide) */
     svf_t flt;                   /* the DJ filter (KNOB 1) */
     int32_t f_oct, f_q, f_amt;   /* its cutoff (log2 Hz, Q16), Q (Q12) and wet share (Q15) as they glide */
+    svf_c f_coef;
+    int32_t f_cached_oct, f_cached_q;
     uint8_t f_hp;                /* high-pass (else low-pass) */
     uint32_t cr_ph;              /* the crush's sample-rate reduction: its phase, the sample it holds */
     int32_t cr_hold;
@@ -204,6 +209,8 @@ enum { LR_IDLE, LR_ARMED, LR_REC };
 #define LE_ON(e) ((e) >> 31)
 #define LE(t, note, on) (((t) & 0xFFFFFFu) | ((uint32_t)((note) & 0x7Fu) << 24) | ((uint32_t)((on) != 0) << 31))
 typedef struct {
+    uint16_t speed_pct;          /* INTERVAL: 0 means 100%, otherwise 25..400; relative to track */
+    uint32_t speed_acc;          /* fractional playback clock, Q16 */
     uint32_t len;                /* blocks of loop time */
     int32_t pos;                 /* where it is: the block of loop time it plays next */
     uint16_t first, n;           /* its events in the looper's ev[] */
@@ -226,6 +233,8 @@ typedef struct {
     uint8_t nheld;
     uint8_t held[16];            /* notes on in the recording, not yet off */
     uint32_t start;              /* the loop clock when the recording began */
+    uint16_t speed_pct;          /* INTERVAL: 0 means 100%, otherwise 25..400 */
+    uint32_t speed_acc;          /* fractional recording clock, Q16 half-blocks */
     uint32_t lclk;               /* the loop clock: half blocks of loop time, 1 a block at half speed, 2, 4 at double */
     uint8_t dmode, rate;         /* LD_*, LS_* (the 4th .. 8th black keys) */
     uint8_t vary;                /* SHIFT + REC: each note it plays at a level and for a length drawn at random */
@@ -283,6 +292,7 @@ static void trk_start(const looper_t *p, loop_trk_t *t)
     t->ix = (int16_t)(t->dir > 0 ? 0 : (int32_t)t->n - 1);
     t->wrap = 0;
     t->rgo = 0;
+    t->speed_acc = 0;
     memset(t->snd, 0, sizeof t->snd);
 }
 /* the loops' transposition (SHIFT + OCT): every loop moved by steps of the scale, its notes walked up or down the
@@ -313,6 +323,10 @@ static uint32_t lx_map(uint32_t n, int32_t k, uint32_t mask)
         while (b > 0 && !((mask >> (b % 12)) & 1u));
     return (uint32_t)clampi(b + (int32_t)n, 0, 127);
 }       /* blocks since boot (the ISR) */
+
+/* Drum identity survives melodic transposition of recorded loops. */
+static uint32_t layer_note(uint32_t l,uint32_t n,int32_t shift,uint32_t mask)
+{ return lay[l].want_engine==ENG_BAY ? n : lx_map(n,shift,mask); }
 
 /* each layer's level and place in the stereo field, set by the main loop (SELECT, ALGORITHM): the gain Q14
  * (1.0 = 16384) and the two sides of an equal-power pan, Q15. The ISR glides to them over a block. */
@@ -504,18 +518,26 @@ static void lim_block(int32_t *env, int32_t *g, int32_t *x, uint32_t n)
 /* --------------------------------------------------------- events --- */
 enum { EV_ON, EV_OFF, EV_ENGINE, EV_STOP, EV_LOOP_REC, EV_LOOP_PLAY, EV_LOOP_CLEAR, EV_LOOP_SET, EV_LOOPS, EV_LOOP_TRK, EV_LOOP_XP, EV_LOOP_MODE, EV_MIDI_OFF,
        EV_LATCH,                 /* (a key's note latched: its voice is never let go by the overload guard) */
-       EV_LOOP_EMPTY, EV_LOOP_PACK, EV_LOOP_TAKES };   /* (the snapshots': snaps.c) */
+       EV_LOOP_EMPTY, EV_LOOP_PACK, EV_LOOP_TAKES, EV_LOOP_SPEED };   /* (the snapshots': snaps.c) */
 typedef struct { uint8_t type, layer, note, val; } ev_t;
 #define EV_UNHEARD 0x80u         /* (EV_ON, EV_OFF: in val, a sequencer's note -- the looper does not record it) */
 #define EVQ 64u
 static ev_t evq[EVQ];
 static volatile uint32_t ev_w, ev_r;
+static volatile uint32_t ev_off_lost[NLAYER][4]; /* emergency key/sequence note-offs when the event ring is full */
+static volatile uint32_t ev_off_heard[NLAYER][4];
 
 static void ev_post(uint32_t type, uint32_t layer, uint32_t note, uint32_t val)   /* main loop */
 {
     ev_t e;
-    if (ev_w - ev_r >= EVQ || layer >= NLAYER)
+    if (layer >= NLAYER) return;
+    if (ev_w - ev_r >= EVQ) {
+        if (type == EV_OFF && note < 128u) {
+            if (!(val & EV_UNHEARD)) ev_off_heard[layer][note >> 5] |= 1u << (note & 31u);
+            ev_off_lost[layer][note >> 5] |= 1u << (note & 31u); /* publish last */
+        }
         return;
+    }
     e.type = (uint8_t)type;
     e.layer = (uint8_t)layer;
     e.note = (uint8_t)note;
@@ -526,6 +548,7 @@ static void ev_post(uint32_t type, uint32_t layer, uint32_t note, uint32_t val) 
 }
 
 /* ------------------------------------------------------- the voices --- */
+static int8_t flt_edit[NLAYER][2]; /* type DJ/LP/HP/BP; resonance 0=AUTO, 1..101 */
 static uint32_t lay_age;
 static void voice_on(uint32_t l, uint32_t k, int fresh)
 {
@@ -560,6 +583,7 @@ static void voice_on(uint32_t l, uint32_t k, int fresh)
     else {
         an_note_on(&vmem[k].an, &an_buf[l][an_use[l]], pitch_inc((int32_t)v->note * 16), fresh || !v->sounding);
         vmem[k].an.env_hold = 0;
+        vmem[k].an.ktmul = v->vel >= 112u;
     }
     v->est = AE_OFF;
     if (lay_env_on[l]) {                          /* the track's own envelope: its own held, this one from 0 */
@@ -645,6 +669,12 @@ static uint32_t voice_pick(uint32_t l, int own)
 /* a note to CALIGULA, while the layer is (or is becoming) it; else to the voices */
 static int cal_note(uint32_t l, uint32_t note, int on, uint32_t src)
 {
+    if (on && lay[l].want_engine == lay[l].engine && eng_organism(lay[l].engine)
+        && !(lay[l].engine == ENG_CAL ? cal_rt[l].live : rus_rt[l].live)) {
+        uint32_t cost=eng_cost[lay[l].engine & 7u];
+        if (blk_last + blk_new + cost > BUDGET) { overload_skipped++; return 1; }
+        blk_new += cost; /* also reserve starts using the external ADSR */
+    }
     if (eng_organism(lay[l].want_engine) && lay_env_on[l]) {   /* the track's own envelope on an organism */
         int cal = lay[l].want_engine == ENG_CAL;
         uint32_t held = cal ? cal_rt[l].nheld : rus_rt[l].nheld;
@@ -674,9 +704,11 @@ static int cal_note(uint32_t l, uint32_t note, int on, uint32_t src)
         }
     }
 
-    if (on && lay[l].want_engine == lay[l].engine && eng_organism(lay[l].engine)
-        && !(lay[l].engine == ENG_CAL ? cal_rt[l].live : rus_rt[l].live))
-        blk_new += eng_cost[lay[l].engine & 7u];  /* (the organism wakes: what it will cost, ahead) */
+    if(on && lay[l].want_engine==ENG_BAY && ((note-48u)&15u)==4u)
+        for(uint32_t h=0;h<NVOICE;h++)
+            if(vox[h].layer==l && vox[h].eng==ENG_BAY && vmem[h].ba.live && vmem[h].ba.slot==5u)
+                vmem[h].ba.choke=128;
+
     if (lay[l].want_engine == ENG_RUS) {
         if (on)
             rus_note_on(&rus_rt[l], &rus_buf[l][rus_use[l]], note);
@@ -707,6 +739,17 @@ static void rx_lq_put(uint32_t l, uint32_t note, uint32_t vel)
     rx_lw++;
 }
 /* a note on: a silent voice if there is one, else the one ringing longest (released before held) */
+typedef struct {uint8_t note,src,vel;} acid_held_note;
+static acid_held_note acid_held[NLAYER][32] POOL;
+static uint8_t acid_nheld[NLAYER];
+static int16_t acid_edit[NLAYER][4]; /* waveform auto/saw/square, accent %, slide ms, drive % */
+static void acid_remember(uint32_t l,uint32_t note,uint32_t src,uint32_t vel) {
+    uint32_t n=acid_nheld[l],i;
+    for(i=0;i<n;i++) if(acid_held[l][i].note==note && acid_held[l][i].src==src) break;
+    if(i<n) {for(;i+1<n;i++)acid_held[l][i]=acid_held[l][i+1];n--;}
+    if(n==32) {for(i=0;i<31;i++)acid_held[l][i]=acid_held[l][i+1];n--;}
+    acid_held[l][n]=(acid_held_note){(uint8_t)note,(uint8_t)src,(uint8_t)vel};acid_nheld[l]=(uint8_t)(n+1);
+}
 static uint8_t note_vel = 127;           /* the level of the note note_on makes (EV_ON's value; else full) */
 static void note_on(uint32_t l, uint32_t note, uint32_t src)
 {
@@ -718,7 +761,26 @@ static void note_on(uint32_t l, uint32_t note, uint32_t src)
     midi_note_out(l, note, note_vel, 1);          /* (SEND NOTES: on the track's OUT channel) */
     if (cal_note(l, note, 1, src))
         return;
-    best = voice_pick(l, y->xfade != 0);
+    if (y->engine==ENG_ANIMA && !y->xfade) {
+        acid_remember(l,note,src,note_vel);
+        for(uint32_t k=0;k<NVOICE;k++) if(vox[k].sounding && vox[k].layer==l && vox[k].eng==ENG_ANIMA && !vox[k].fade) {
+            voice_t *v=&vox[k]; int fresh=!v->gate;
+            v->note=(uint8_t)note; v->src=(uint8_t)src; v->vel=note_vel; v->gate=1;
+            voice_on(l,k,fresh); return;
+        }
+    }
+    /* Reserve each additional voice conservatively before a burst is rendered.
+     * There is no fixed sequencer/ball cap. Existing note-offs still run.
+     * Already fading voices still consume CPU and do not create free budget. */
+    if (blk_last + blk_new + eng_cost[y->engine & 7u] > BUDGET) {
+        best = NVOICE;
+        for (uint32_t k=0;k<NVOICE;k++) {
+            voice_t *v = &vox[k];
+            if (v->sounding && !v->gate && !v->pend && !v->fade && v->eng == y->engine &&
+                (!y->xfade || v->layer == l) && (best == NVOICE || v->lvl < vox[best].lvl)) best=k;
+        }
+        if (best == NVOICE) { overload_skipped++; return; }
+    } else best = voice_pick(l, y->xfade != 0);
     if (best == NVOICE)
         return;                                  /* (the layer fading for a change, every voice another's) */
     {
@@ -751,6 +813,17 @@ static void note_off(uint32_t l, uint32_t note, uint32_t src)
         rx_lq_put(l, note, 0);
     if (cal_note(l, note, 0, src))
         return;
+    if(y->engine==ENG_ANIMA) {
+        uint32_t n=acid_nheld[l],i;
+        for(i=0;i<n;i++)if(acid_held[l][i].note==note && acid_held[l][i].src==src)break;
+        if(i<n) {for(;i+1<n;i++)acid_held[l][i]=acid_held[l][i+1];acid_nheld[l]=(uint8_t)--n;}
+        if(n) for(k=0;k<NVOICE;k++) {
+            voice_t *v=&vox[k];
+            if(v->gate && v->sounding && v->layer==l && v->eng==ENG_ANIMA && v->note==note && v->src==src) {
+                acid_held_note h=acid_held[l][n-1];v->note=h.note;v->src=h.src;v->vel=h.vel;voice_on(l,k,0);return;
+            }
+        }
+    }
     for (k = 0; k < NVOICE; k++) {
         voice_t *v = &vox[k];
         if (v->gate && vox_owner(v) == l && v->note == note && v->src == src) {
@@ -761,9 +834,57 @@ static void note_off(uint32_t l, uint32_t note, uint32_t src)
         }
     }
 }
+/* Scheduled notes are rendered by the audio clock, independent of redraws. */
+static uint32_t clock_scale(uint32_t value,uint32_t mul,uint32_t div) {
+    uint64_t z=(uint64_t)value*mul;
+    return div?udiv64_32((uint32_t)(z>>32),(uint32_t)z,div):0;
+}
+static void clock_insert(clock_req e) {
+    if(lay[e.l].engine==ENG_ANIMA) for(uint32_t i=0;i<CLOCK_Q;i++) if(clock_q[i].state==1) {
+        clock_req *old=&clock_q[i].e;
+        if(old->l==e.l && old->target==e.target && old->due==e.due && old->epoch==e.epoch) {
+            if(old->vel>e.vel)e.vel=old->vel;*old=e;return;
+        }
+    }
+    for(uint32_t i=0;i<CLOCK_Q;i++) if(!clock_q[i].state) {clock_q[i].e=e;clock_q[i].state=1;return;}
+    clock_dropped++;
+}
+static void clock_audio(void) {
+    while(clock_r!=clock_w) {
+        clock_req e=clock_in[clock_r%CLOCK_Q]; clock_r++;
+        clock_insert(e);
+    }
+    /* Releases before starts at the same boundary. */
+    for(uint32_t i=0;i<CLOCK_Q;i++) {
+        clock_req *e=&clock_q[i].e;
+        if(!clock_q[i].state) continue;
+        int cancel=e->epoch!=clock_cancel[e->l][e->target];
+        if(e->target==CK_LOOP && (!loop[e->l].play || (e->take && ((loop[e->l].mute>>(e->take-1u))&1u)))) cancel=1;
+        if(cancel || (clock_q[i].state==2 && (int32_t)(clock_tick-e->due)>=0)) {
+            if(clock_q[i].state==2) note_off(e->l,e->note,e->target==CK_LOOP?SRC_LOOP:SRC_CLOCK);
+            clock_q[i].state=0;
+        }
+    }
+    for(uint32_t i=0;i<CLOCK_Q;i++) if(clock_q[i].state==1) {
+        clock_req *e=&clock_q[i].e;
+        if((int32_t)(clock_tick-e->due)>=0) {
+            /* Never replay a backlog of missed notes after a pause. */
+            if((int32_t)(clock_tick-e->due)>960) {clock_q[i].state=0;continue;}
+            for(uint32_t j=0;j<CLOCK_Q;j++) if(j!=i && clock_q[j].state==2) {
+                clock_req *old=&clock_q[j].e;
+                if(old->l==e->l && old->note==e->note && (old->target==CK_LOOP)==(e->target==CK_LOOP)) {
+                    if(lay[e->l].engine!=ENG_ANIMA)note_off(old->l,old->note,old->target==CK_LOOP?SRC_LOOP:SRC_CLOCK);clock_q[j].state=0;
+                }
+            }
+            note_vel=e->vel; note_on(e->l,e->note,e->target==CK_LOOP?SRC_LOOP:SRC_CLOCK); note_vel=127;
+            e->due+=e->len; clock_q[i].state=2;
+        }
+    }
+}
 /* every note the loop plays on layer l, let go */
 static void loop_notes_off(uint32_t l)
 {
+    clock_cancel[l][CK_LOOP]++;
     uint32_t k;
     for (k = 0; k < LOOP_TRK; k++)
         memset(loop[l].trk[k].snd, 0, sizeof loop[l].trk[k].snd);
@@ -847,7 +968,9 @@ static void change_apply(uint32_t l)
         }
         cal_init(c, 0xC0u + l * 131u + lay_age);
         rus_init(&rus_rt[l], 0x7A5u + l * 131u + lay_age);
+        acid_nheld[l]=0;
         y->engine = y->want_engine;
+        if(y->engine==ENG_ANIMA && n>1) {nn[0]=nn[n-1];ns[0]=ns[n-1];n=1;}
         fm_use[l] = fm_pub[l];
         an_use[l] = an_pub[l];
         cal_use[l] = cal_pub[l];
@@ -899,9 +1022,20 @@ static void loop_rewind(looper_t *p)               /* every loop from its start 
     for (k = 0; k < p->ntrk; k++)
         trk_start(p, &p->trk[k]);
 }
+static uint32_t loop_sync_rec_start[NLAYER],loop_sync_rec_end[NLAYER],loop_sync_rec_origin[NLAYER];
+static uint8_t loop_sync_closing[NLAYER];
 static void loop_cmd(uint32_t l, uint32_t type)
 {
     looper_t *p = &loop[l];
+    if(type==EV_LOOP_REC && clk.mode[l][CK_LOOP]) {
+        if(p->rec==LR_REC && !loop_sync_closing[l]) {
+            uint32_t cycle=(uint32_t)clk.bars[l]*3840u;
+            uint32_t elapsed=clock_tick-loop_sync_rec_origin[l];
+            loop_sync_rec_end[l]=loop_sync_rec_origin[l]+(elapsed/cycle+1u)*cycle;return;
+        }
+        if(p->rec==LR_ARMED) loop_sync_rec_start[l]=0;
+        else if(p->rec==LR_IDLE) loop_sync_rec_start[l]=clock_next(3840);
+    }
     switch (type) {
     case EV_LOOP_REC:
         if (p->rec == LR_REC) {                   /* the end: a loop as long as this */
@@ -952,9 +1086,12 @@ static void loop_cmd(uint32_t l, uint32_t type)
         }
         break;
     case EV_LOOP_CLEAR:
+        loop_sync_rec_start[l]=loop_sync_rec_end[l]=0;
+        memset(clk.take_bars[l],0,sizeof clk.take_bars[l]);
         loop_notes_off(l);
         p->dmode = LD_FWD;                        /* (emptied: forwards, at its speed, as played, again) */
         p->rate = LS_NORMAL;
+        p->speed_pct = 100; p->speed_acc = 0;
         p->vary = 0;
         memset(vq[l], 0, sizeof vq[l]);
         memset(vo[l], 0, sizeof vo[l]);
@@ -981,9 +1118,12 @@ static void loop_set(uint32_t l, uint32_t play)
 static void loop_hear(uint32_t l, uint32_t on, uint32_t note)
 {
     looper_t *p = &loop[l];
-    if (p->rec == LR_ARMED && on) {
+    if (p->rec == LR_ARMED && on && !clk.mode[l][CK_LOOP]) {
         p->rec = LR_REC;
         p->start = p->lclk;
+        clk.take_bars[l][p->ntrk]=0;
+        p->trk[p->ntrk].speed_pct = 100;
+        p->trk[p->ntrk].speed_acc = 0;
         p->trk[p->ntrk].first = (uint16_t)p->nev;
         p->trk[p->ntrk].xb = (int8_t)(lx_steps + lx_tr[l]);   /* (it plays back as played, whatever the others are
                                                               * moved by) */
@@ -998,7 +1138,7 @@ static void trk_off(uint32_t l, loop_trk_t *t)
     uint32_t n;
     for (n = 0; n < 128u; n++)
         if ((t->snd[n >> 5] >> (n & 31u)) & 1u)
-            note_off(l, lx_map(n, lx_steps + lx_tr[l] - t->xb, lx_mask), SRC_LOOP);
+            note_off(l, layer_note(l, n, lx_steps + lx_tr[l] - t->xb, lx_mask), SRC_LOOP);
     memset(t->snd, 0, sizeof t->snd);
 }
 /* loop k of layer l in or out (PLAY held, its white key). In while they play: from its start, now. Out: the notes
@@ -1201,7 +1341,7 @@ static void vq_add(uint32_t l, uint32_t wait, uint32_t note, uint32_t vel, uint3
 /* a loop note under VARY */
 static void vary_strike(uint32_t l, looper_t *p, loop_trk_t *t, uint32_t raw)
 {
-    uint32_t nt = lx_map(raw, lx_steps + lx_tr[l] - t->xb, lx_mask), wait = 0, vel, len, k;
+    uint32_t nt = layer_note(l, raw, lx_steps + lx_tr[l] - t->xb, lx_mask), wait = 0, vel, len, k;
     if (lv_odds(p, 5))
         return;                                   /* dropped, this time round */
     vel = lv_in(p, 40, 126);
@@ -1223,14 +1363,14 @@ static void vary_strike(uint32_t l, looper_t *p, loop_trk_t *t, uint32_t raw)
     }
     if (lv_odds(p, 8)) {                          /* a note not recorded: a step or two away, or a fifth */
         static const int8_t ST[5] = {-2, -1, 1, 2, 4};
-        uint32_t f = lx_map(nt, ST[lv_in(p, 0, 4)], lx_mask);
+        uint32_t f = layer_note(l, nt, ST[lv_in(p, 0, 4)], lx_mask);
         if (lv_odds(p, 60))
             nt = f;
         else
             vq_add(l, wait, f, vel * 4u / 5u, len);
     }
     if (lv_odds(p, 4)) {                          /* a grace note just before */
-        vq_add(l, wait, lx_map(nt, lv_odds(p, 50) ? 1 : -1, lx_mask), vel * 7u / 10u, lv_blocks(lv_in(p, 40, 80)));
+        vq_add(l, wait, layer_note(l, nt, lv_odds(p, 50) ? 1 : -1, lx_mask), vel * 7u / 10u, lv_blocks(lv_in(p, 40, 80)));
         wait += lv_blocks(lv_in(p, 50, 90));
     }
     if (lv_odds(p, 4)) {                          /* ratchet: struck 2 .. 4 times, quickly */
@@ -1240,13 +1380,13 @@ static void vary_strike(uint32_t l, looper_t *p, loop_trk_t *t, uint32_t raw)
     } else
         vq_add(l, wait, nt, vel, len);
     if (lv_odds(p, 10))                           /* a third or a fifth above, with it */
-        vq_add(l, wait, lx_map(nt, lv_odds(p, 50) ? 2 : 4, lx_mask), vel * 4u / 5u, len);
+        vq_add(l, wait, layer_note(l, nt, lv_odds(p, 50) ? 2 : 4, lx_mask), vel * 4u / 5u, len);
     if (lv_odds(p, 15)) {                         /* echoes, quieter each, some climbing or falling */
         uint32_t n = lv_in(p, 1, 4), d = lv_blocks(lv_in(p, 120, 400)), v = vel;
         int32_t dir = lv_odds(p, 40) ? (lv_odds(p, 50) ? 1 : -1) : 0;
         for (k = 1; k <= n; k++) {
             v = v * 3u / 5u;
-            vq_add(l, wait + k * d, lx_map(nt, dir * (int32_t)k, lx_mask), v > 8u ? v : 8u, len < d ? len : d);
+            vq_add(l, wait + k * d, layer_note(l, nt, dir * (int32_t)k, lx_mask), v > 8u ? v : 8u, len < d ? len : d);
         }
     }
 }
@@ -1257,7 +1397,7 @@ static void loop_strike(uint32_t l, looper_t *p, loop_trk_t *t, uint32_t raw)
         vary_strike(l, p, t, raw);
         return;
     }
-    note_on(l, lx_map(raw, lx_steps + lx_tr[l] - t->xb, lx_mask), SRC_LOOP);
+    note_on(l, layer_note(l, raw, lx_steps + lx_tr[l] - t->xb, lx_mask), SRC_LOOP);
     t->snd[raw >> 5] |= 1u << (raw & 31u);
 }
 /* a block: VARY's notes due struck, those whose time is up let go (the loops stopped: nothing more struck) */
@@ -1296,7 +1436,7 @@ static int tied_alive(uint32_t l, uint32_t note)
  * first block, its end the last; backwards the other way round) */
 static void trk_play(uint32_t l, loop_trk_t *t, looper_t *p, uint32_t e, int as_on)
 {
-    uint32_t raw = LE_NOTE(e), nt = lx_map(raw, lx_steps + lx_tr[l] - t->xb, lx_mask);
+    uint32_t raw = LE_NOTE(e), nt = layer_note(l, raw, lx_steps + lx_tr[l] - t->xb, lx_mask);
     int tied = trk_tied(p, t, e);
     if (as_on) {
         if (t->wrap && tied && !p->vary) {
@@ -1325,7 +1465,7 @@ static void trk_jump(uint32_t l, looper_t *p, loop_trk_t *t)
     uint32_t n, j, k;
     for (n = 0; n < 128u; n++)
         if ((t->snd[n >> 5] >> (n & 31u)) & 1u)
-            note_off(l, lx_map(n, lx_steps + lx_tr[l] - t->xb, lx_mask), SRC_LOOP);
+            note_off(l, layer_note(l, n, lx_steps + lx_tr[l] - t->xb, lx_mask), SRC_LOOP);
     memset(t->snd, 0, sizeof t->snd);
     t->rgo = 0;
     t->wrap = 0;
@@ -1363,7 +1503,7 @@ static void trk_step(uint32_t l, looper_t *p, loop_trk_t *t)
                 t->rgo = 1;
             } else if ((t->snd[LE_NOTE(e) >> 5] >> (LE_NOTE(e) & 31u)) & 1u) {   /* (only what it struck as
                                                                                     * recorded -- VARY's, never) */
-                note_off(l, lx_map(LE_NOTE(e), lx_steps + lx_tr[l] - t->xb, lx_mask), SRC_LOOP);
+                note_off(l, layer_note(l, LE_NOTE(e), lx_steps + lx_tr[l] - t->xb, lx_mask), SRC_LOOP);
                 t->snd[LE_NOTE(e) >> 5] &= ~(1u << (LE_NOTE(e) & 31u));
             }
         }
@@ -1532,19 +1672,103 @@ static int32_t vt_speed(uint32_t l, looper_t *p)   /* a block on: the pace, Q16 
 
 /* one block of every loop that plays: as many blocks of loop time as the speed has passed (at half speed every
  * other block, at double two; VARY's time on top) */
+/* 0 keeps legacy/default sessions at unity. The upper bound limits ISR work. */
+static uint32_t loop_pct(uint32_t p) { return p ? (uint32_t)clampi((int32_t)p, 25, 400) : 100u; }
+/* SYNC playback is a non-destructive view of the original event times.
+ * Only ons are scheduled; their matched off travels with them, preserving gates.
+ * FREE's positions, speed controls and original events are never quantized. */
+static struct {uint32_t epoch,start,cycle;int32_t ix;uint8_t valid,reverse;} loop_sync[NLAYER][LOOP_TRK] POOL;
+
+static uint8_t loop_sync_was[NLAYER];
+static void loop_sync_run(uint32_t l) {
+    looper_t *p=&loop[l];
+    uint32_t base_cycle=(uint32_t)clampi(clk.bars[l],1,64)*3840u;
+    uint32_t grid=clock_div(l,CK_LOOP);
+    if(!p->play) {for(uint32_t k=0;k<LOOP_TRK;k++)loop_sync[l][k].valid=0;return;}
+    for(uint32_t k=0;k<p->ntrk;k++) {
+        loop_trk_t *t=&p->trk[k];
+        uint32_t cycle=clk.take_bars[l][k]?(uint32_t)clk.take_bars[l][k]*3840u:base_cycle;
+        __typeof__(loop_sync[0][0]) *st=&loop_sync[l][k];
+        if((p->mute>>k)&1u) {st->valid=0;continue;}
+        if(!t->len || !t->n) continue;
+        if(!st->valid || st->epoch!=clock_cancel[l][CK_LOOP] || st->cycle!=cycle) {
+            st->epoch=clock_cancel[l][CK_LOOP];st->start=clock_next(3840);
+            st->cycle=cycle;st->reverse=p->dmode==LD_REV;
+            st->ix=st->reverse?(int32_t)t->n-1:0;st->valid=1;
+        }
+        while((int32_t)(clock_tick-st->start)>=(int32_t)cycle) {
+            st->start+=cycle;
+            if(p->dmode==LD_PEND) st->reverse=!st->reverse;
+            else st->reverse=p->dmode==LD_REV;
+            st->ix=st->reverse?(int32_t)t->n-1:0;
+        }
+        while(st->ix>=0 && st->ix<(int32_t)t->n) {
+            uint32_t e=p->ev[t->first+st->ix],time=LE_T(e),note=LE_NOTE(e);
+            if((int)LE_ON(e)==(int)st->reverse) {st->ix+=st->reverse?-1:1;continue;}
+            uint32_t offset=clock_scale(st->reverse?t->len-1-time:time,cycle,t->len);
+            if(grid) offset=((offset+grid/2)/grid)*grid;
+            if(offset>=cycle) offset=cycle-1;
+            uint32_t due=st->start+offset;
+            if((int32_t)(due-clock_tick)>16) break;
+            uint32_t duration=st->reverse?time+1:t->len-time;
+            for(int32_t j=st->ix+(st->reverse?-1:1);j>=0 && j<(int32_t)t->n;j+=st->reverse?-1:1) {
+                uint32_t off=p->ev[t->first+j];
+                if(LE_NOTE(off)==note && LE_ON(off)==(uint32_t)st->reverse) {
+                    duration=st->reverse?time-LE_T(off):LE_T(off)-time;break;
+                }
+            }
+            uint32_t len=clock_scale(duration,cycle,t->len);
+            if(p->dmode==LD_RAND) {
+                if(!p->rnd)p->rnd=0x9E3779B9u+l;
+                p->rnd^=p->rnd<<13;p->rnd^=p->rnd>>17;p->rnd^=p->rnd<<5;
+                uint32_t ri=p->rnd%t->n;
+                for(uint32_t j=0;j<t->n;j++){uint32_t re=p->ev[t->first+(ri+j)%t->n];if(LE_ON(re)){note=LE_NOTE(re);break;}}
+            }
+            clock_req request={due,len?len:1,clock_cancel[l][CK_LOOP],(uint8_t)l,CK_LOOP,
+                (uint8_t)layer_note(l,note,lx_steps+lx_tr[l]-t->xb,lx_mask),110};
+            request.take=(uint8_t)(k+1);
+            clock_insert(request);
+            st->ix+=st->reverse?-1:1;
+        }
+    }
+}
 static void loops_run(void)
 {
     uint32_t l, k;
     for (l = 0; l < NLAYER; l++) {
         looper_t *p = &loop[l];
         uint32_t was = p->lclk, steps;
-        p->lclk += p->rate == LS_HALF ? 1u : p->rate == LS_DOUBLE ? 4u : 2u;
+        if(clk.mode[l][CK_LOOP] && p->ntrk<LOOP_TRK && p->rec==LR_ARMED && loop_sync_rec_start[l] && (int32_t)(clock_tick-loop_sync_rec_start[l])>=0) {
+            p->rec=LR_REC;p->start=p->lclk;
+            loop_trk_t *t=&p->trk[p->ntrk];t->speed_pct=100;t->speed_acc=0;t->first=(uint16_t)p->nev;t->xb=(int8_t)(lx_steps+lx_tr[l]);
+            loop_sync_rec_origin[l]=loop_sync_rec_start[l];loop_sync_rec_start[l]=0;
+        }
+        if(clk.mode[l][CK_LOOP] && p->rec==LR_REC && loop_sync_rec_end[l] && (int32_t)(clock_tick-loop_sync_rec_end[l])>=0) {
+            uint32_t take=p->ntrk, end=loop_sync_rec_end[l];
+            clk.take_bars[l][take]=(uint8_t)clampi((end-loop_sync_rec_origin[l])/3840u,1,64);
+            loop_sync_closing[l]=1;loop_cmd(l,EV_LOOP_REC);loop_sync_closing[l]=0;
+            loop_sync[l][take].epoch=clock_cancel[l][CK_LOOP];
+            loop_sync[l][take].start=end;loop_sync[l][take].cycle=(uint32_t)clk.take_bars[l][take]*3840u;
+            loop_sync[l][take].reverse=p->dmode==LD_REV;loop_sync[l][take].ix=p->dmode==LD_REV?(int32_t)p->trk[take].n-1:0;
+            loop_sync[l][take].valid=1;loop_sync_rec_end[l]=0;
+        }
+        uint32_t legacy = p->rate == LS_HALF ? 32768u : p->rate == LS_DOUBLE ? 131072u : 65536u;
+        uint32_t base = clk.mode[l][CK_LOOP]?65536u:legacy * loop_pct(p->speed_pct) / 100u;
+        p->speed_acc += base * 2u;
+        p->lclk += p->speed_acc >> 16;
+        p->speed_acc &= 65535u;
         steps = (p->lclk >> 1) - (was >> 1);
+        if(clk.mode[l][CK_LOOP]) {
+            if(!loop_sync_was[l]) {loop_notes_off(l);memset(loop_sync[l],0,sizeof loop_sync[l]);}
+            loop_sync_was[l]=1;
+            loop_sync_run(l);continue;
+        } else if(loop_sync_was[l]) {
+            loop_sync_was[l]=0;clock_cancel[l][CK_LOOP]++;loop_rewind(p);
+        }
         lv_tick(l);
         if (!p->play)
             continue;
         if (p->vary && p->rec != LR_REC) {                 /* VARY's time: the steps through its pace */
-            uint32_t base = p->rate == LS_HALF ? 32768u : p->rate == LS_DOUBLE ? 131072u : 65536u;
             vt[l].acc += (uint32_t)(((uint64_t)base * (uint32_t)vt_speed(l, p)) >> 16);
             steps = vt[l].acc >> 16;
             vt[l].acc &= 0xFFFFu;
@@ -1554,7 +1778,11 @@ static void loops_run(void)
             uint32_t s;
             if ((p->mute >> k) & 1u)
                 continue;                         /* (held out: it waits, silent, where it is) */
-            for (s = 0; s < steps; s++)
+            /* Track time is shared; each loop integrates its own ratio without resetting phase. */
+            t->speed_acc += steps * (65536u * loop_pct(t->speed_pct) / 100u);
+            uint32_t local_steps = t->speed_acc >> 16;
+            t->speed_acc &= 65535u;
+            for (s = 0; s < local_steps; s++)
                 trk_step(l, p, t);
         }
     }
@@ -1585,7 +1813,7 @@ static void loop_retune(void)
                     continue;
                 for (n = 0; n < 128u; n++)
                     if ((t->snd[n >> 5] >> (n & 31u)) & 1u) {
-                        uint32_t was = lx_map(n, lx_steps + lx_tr[l] - t->xb, lx_mask), now = lx_map(n, s + tr[l] - t->xb, m);
+                        uint32_t was = layer_note(l, n, lx_steps + lx_tr[l] - t->xb, lx_mask), now = layer_note(l, n, s + tr[l] - t->xb, m);
                         if (was == now)
                             continue;
                         if (!pass)
@@ -1626,9 +1854,12 @@ static void events_take(void)        /* audio ISR, at a block start */
             note_off(e.layer, e.note, SRC_KEY);
             break;
         case EV_ENGINE:
+            for(uint32_t t=0;t<3;t++)clock_cancel[e.layer][t]++;
             y->want_engine = (uint8_t)(e.val < NENG ? e.val : 0);
             break;
         case EV_STOP:
+            for(uint32_t ct=0;ct<3;ct++) clock_cancel[e.layer][ct]++;
+            acid_nheld[e.layer]=0;
             midi_layer_off(e.layer);
             org_defer[e.layer] = 0;
             org_est[e.layer] = AE_OFF;
@@ -1671,6 +1902,16 @@ static void events_take(void)        /* audio ISR, at a block start */
             for (k = 0; k < NLAYER; k++)
                 midi_layer_off(k);
             break;
+        case EV_LOOP_SPEED:
+            if (e.layer < NLAYER) {
+                uint16_t pct = (uint16_t)clampi((int32_t)e.val, 25, 400);
+                if (e.note == LOOP_TRK) {
+                    loop[e.layer].speed_pct = pct;
+                    loop[e.layer].rate = LS_NORMAL;
+                } else if (e.note < loop[e.layer].ntrk)
+                    loop[e.layer].trk[e.note].speed_pct = pct;
+            }
+            break;
         case EV_LOOP_MODE:                        /* (note: 0 the direction, 1 the speed, 2 VARY; val: which) */
             loop_mode(e.layer, e.note, e.val);
             break;
@@ -1695,6 +1936,19 @@ static void events_take(void)        /* audio ISR, at a block start */
         default:
             loop_cmd(e.layer, e.type);
             break;
+        }
+    }
+    /* Producer is the main loop on CPU0; this ISR drains emergency releases
+     * after queued starts, so a full event ring cannot leave a key stuck on. */
+    for (uint32_t l=0;l<NLAYER;l++) for (uint32_t w=0;w<4;w++) {
+        uint32_t mask=ev_off_lost[l][w], heard=ev_off_heard[l][w];
+        /* A producer interrupted before publishing its release may have set
+         * the heard bit first. Keep that bit until its release arrives. */
+        ev_off_heard[l][w] &= ~mask;
+        ev_off_lost[l][w]=0;
+        for (uint32_t n=0;mask;n++,mask>>=1,heard>>=1) if (mask&1u) {
+            if (heard&1u) loop_hear(l,0,w*32u+n);
+            note_off(l,w*32u+n,SRC_KEY);
         }
     }
 }
@@ -1765,6 +2019,10 @@ static void voice_render(uint32_t k)
         alive = dr_render(&vmem[k].dr, &dr_buf[l][dr_use[l]], vb, CTL);
     } else if (e == ENG_BAY) {
         memcpy(vmem[k].ba.mac, blk_felt[l], NMAC);
+        /* Banks of 16 keep pad identity separate from octave. MIDI 48..63 is neutral. */
+        int32_t oct=clampi((int32_t)(vox[k].note/16)-3+ba_register[l],-6,6);
+        uint32_t rate=(uint32_t)ba_buf[l][ba_use[l]].fm1r;
+        vmem[k].ba.inc=oct<0?rate>>(-oct):rate<<oct;
         alive = ba_render_fp(&vmem[k].ba, &ba_buf[l][ba_use[l]], vb, CTL);
     } else if (e == ENG_HIVE) {
         memcpy(vmem[k].hv.mac, blk_felt[l], NMAC);
@@ -1774,6 +2032,9 @@ static void voice_render(uint32_t k)
         alive = ob_render_fp(&vmem[k].ob, &ob_buf[l][ob_use[l]], vb, CTL);
     } else {
         memcpy(vmem[k].an.mac, blk_mac[l], NMAC);
+        vmem[k].an.am_on=1;
+        vmem[k].an.lB=acid_edit[l][0];vmem[k].an.lFM=acid_edit[l][1];
+        vmem[k].an.lMulti=acid_edit[l][2];vmem[k].an.lNoise=acid_edit[l][3];
         alive = an_render_fp(&vmem[k].an, &an_buf[l][an_use[l]], vb, CTL);
     }
     COST_ADD(e);
@@ -1873,6 +2134,12 @@ static void blk_render(void)
             vr_lay[k] = 0xFFu;
             if (!vox[k].sounding || eng_organism(lay[vox[k].layer].engine))
                 continue;
+            l=vox[k].layer;
+            if(vox[k].eng==ENG_BAY && lay_env_on[l] && !vox[k].est) {
+                vmem[k].ba.hold=1;
+                vox[k].est=vox[k].gate?AE_DEC:AE_REL;
+                vox[k].elv=1<<24;
+            }
             c = vox[k].cost ? vox[k].cost : eng_cost[lay[vox[k].layer].engine & 7u];
         } else if (k < NVOICE + NLAYER) {
             l = k - NVOICE;
@@ -2094,24 +2361,29 @@ static void layer_block(uint32_t l, int32_t *mixl, int32_t *mixr, int32_t *rvin,
     }
     {   /* the DJ filter */
         int32_t v = mod_val(l, MD_FLT, lay_flt[l], -FLT_MAX, FLT_MAX), a = v < 0 ? -v : v;
-        int32_t amt1 = a >= 4 ? Q15 : a * (Q15 / 4);
+        uint32_t type = (uint32_t)clampi(flt_edit[l][0], 0, 3);
+        int32_t target = type ? 262144 + (v+FLT_MAX)*673861/(2*FLT_MAX) : flt_oct(v);
+        int32_t amt1 = type ? Q15 : a >= 4 ? Q15 : a * (Q15 / 4);
         int32_t q1 = 2896 + (a >= 24 ? 13488 : a * 13488 / 24);         /* Q 0.707 .. 4, Q12 */
+        if (flt_edit[l][1]) q1 = 2896 + (clampi(flt_edit[l][1],1,101)-1)*13488/100;
         if (v)
             y->f_hp = (uint8_t)(v > 0);
         if (amt1 || y->f_amt) {
-            svf_c c;
             int32_t a0 = y->f_amt, da = (amt1 - a0) / CTL;
             if (!y->f_amt) {                      /* coming in: from where the knob is */
-                y->f_oct = flt_oct(v ? v : (y->f_hp ? 1 : -1));
+                y->f_oct = type ? target : flt_oct(v ? v : (y->f_hp ? 1 : -1));
                 y->f_q = q1;
                 y->flt.ic1 = y->flt.ic2 = 0;
             }
-            if (v)
-                y->f_oct += (flt_oct(v) - y->f_oct) >> 2;   /* (glides: a knob's click is a step) */
+            if (v || type)
+                y->f_oct += (target - y->f_oct) >> 2;   /* (glides: a knob's click is a step) */
             y->f_q += (q1 - y->f_q) >> 2;
-            svf_coef(&c, (int32_t)exp2_q16(y->f_oct - (16 << 16)), y->f_q);   /* 2^oct Hz */
+            if (y->f_cached_oct != y->f_oct || y->f_cached_q != y->f_q) {
+                svf_coef(&y->f_coef, (int32_t)exp2_q16(y->f_oct - (16 << 16)), y->f_q);
+                y->f_cached_oct = y->f_oct; y->f_cached_q = y->f_q;
+            }   /* 2^oct Hz */
             for (i = 0; i < CTL; i++) {
-                int32_t f = svf_run(&y->flt, &c, buf[i], y->f_hp ? 3 : 1);
+                int32_t f = svf_run(&y->flt, &y->f_coef, buf[i], type ? (type == 2u ? 3 : type == 3u ? 2 : 1) : y->f_hp ? 3 : 1);
                 a0 += da;
                 buf[i] += mulq15(f - buf[i], a0);
             }
@@ -2185,7 +2457,7 @@ static inline int32_t ceiling(int32_t x)
 /* overload (main.c: two halves in a row over 85 %): the oldest tail of a released note fades; else a CALIGULA's
  * tail (no key on it) is hushed; else the oldest held note that has sounded 1.5 s. A note just played never
  * goes: under it, nothing does */
-#define SHED_HELD_BLOCKS 2067u   /* 1.5 s */
+#define SHED_HELD_BLOCKS 64u     /* ~46 ms: react to sustained overruns before 1.5 s of broken audio */
 static int shed_voice(int held)  /* the oldest released voice (held: the oldest held 1.5 s) faded; 0 if none */
 {
     uint32_t k, ok = NVOICE;
@@ -2221,14 +2493,11 @@ static void shed(uint32_t late)
  * overload guard does that, when the audio is late after all) */
 static void budget_guard(void)
 {
-    uint32_t pred = blk_last + (audio_worker_online ? blk_new / 2u : blk_new), l, k;   /* (two cores: half each) */
+    uint32_t pred = blk_last + blk_new, l, k;   /* conservative: a burst may land on either core */
     blk_new = 0;
-    for (k = 0; k < NVOICE; k++)                  /* (those already fading out are as good as gone) */
-        if (vox[k].sounding && vox[k].fade && !vox[k].pend)
-            pred -= pred < vox[k].cost ? pred : vox[k].cost;
-    for (l = 0; l < NLAYER; l++)
-        if (lay[l].engine == ENG_CAL && cal_rt[l].hush)
-            pred -= pred < org_cost[l] ? pred : org_cost[l];
+    /* A fade is still rendered. Do not pretend its CPU is already free.
+     * Avoid scheduling more retirements until the first fades have finished. */
+    for (k=0;k<NVOICE;k++) if (vox[k].sounding && vox[k].fade && !vox[k].pend) return;
     while (pred > BUDGET) {
         uint32_t ok = NVOICE;
         for (k = 0; k < NVOICE; k++) {
@@ -2271,6 +2540,7 @@ static void mix_block(int32_t *out)
     an_cache_now = blk_clock + 1u;                /* (ANIMA's wavetables from RAM while the ISR renders) */
     midi_main_drain();                            /* (the main loop's MIDI out: the CCs) */
     events_take();
+    clock_audio();
     loops_run();
     budget_guard();
     if (shed_req) {                               /* overload: something already heard goes */
@@ -2304,16 +2574,21 @@ static void mix_block(int32_t *out)
     blk_last = COST_NOW() - c0;
     an_cache_now = 0;
     blk_clock++;
+    clock_advance();
 }
 
 /* ------------------------------------------------ the sounds (main loop) --- */
 /* the tracks' engines at the start (and in an empty session): FM, ANIMA, CALIGULA, HIVE, DRUID, BAYAREA (as on the
  * SMK-37 port, its build 29) */
-static const uint8_t ENG_START[NLAYER] = {ENG_FM, ENG_ANIMA, ENG_CAL, ENG_HIVE, ENG_DRUID, ENG_BAY};
+static const uint8_t ENG_START[NLAYER] = {ENG_FM, ENG_ANIMA, ENG_CAL, ENG_RUS, ENG_DRUID, ENG_BAY};
 static void layers_init(void)
 {
     uint32_t l, k;
     memset(vox, 0, sizeof vox);
+    clock_defaults();
+    memset(acid_nheld,0,sizeof acid_nheld);
+    for(uint32_t a=0;a<NLAYER;a++){acid_edit[a][0]=0;acid_edit[a][1]=70;acid_edit[a][2]=65;acid_edit[a][3]=25;}
+    memset(clock_q,0,sizeof clock_q); clock_r=clock_w=0;
 #ifndef HOST
     eng_cost[ENG_FM] = BLK_TICKS * 5u / 100u;     /* (first guesses, until they are measured) */
     eng_cost[ENG_ANIMA] = BLK_TICKS * 9u / 100u;
@@ -2329,7 +2604,10 @@ static void layers_init(void)
     memset(dist, 0, sizeof dist);
     for (l = 0; l < NLAYER; l++)
         dist[l].g = dist[l].gp = Q16;
-    blk_last = blk_new = 0;
+    blk_last = blk_new = overload_skipped = 0;
+    memset(flt_edit,0,sizeof flt_edit);
+    memset((void *)ev_off_lost,0,sizeof ev_off_lost);
+    memset((void *)ev_off_heard,0,sizeof ev_off_heard);
     for (k = 0; k < NVOICE; k++) {
         an_init(&vmem[k].an, 0xA11u + k * 131u);
         vox[k].eng = ENG_ANIMA;
@@ -2667,7 +2945,7 @@ static const char *sound_name(uint32_t l, uint32_t e)
     if (e == ENG_CAL)
         return CS_NAME[cal_buf[l][cal_pub[l]].kind % CS_N];
     if (e == ENG_RUS)
-        return RK_NAME[rus_buf[l][rus_pub[l]].kind % RK_N];
+        return RK_NAME[rus_buf[l][rus_pub[l]].kind % FRACT_N];
     if (e == ENG_DRUID)
         return DK_NAME[dr_buf[l][dr_pub[l]].kind % DK_N];
     if (e == ENG_BAY)

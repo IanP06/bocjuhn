@@ -14,13 +14,17 @@ typedef struct {
 #define RGB(r, g, b) ((uint16_t)((((r) >> 3) << 11) | (((g) >> 2) << 5) | ((b) >> 3)))
 #define C_BLACK 0x0000u
 #define C_WHITE 0xFFFFu
-#define C_GREY RGB(110, 110, 110)
+#define C_GREY RGB(160, 160, 160)
+#define C_RED RGB(255, 12, 32)
+#define C_GREEN RGB(0, 255, 72)
+#define C_BLUE RGB(28, 96, 255)
 
 #define CV_MAX (240u * 56u)     /* (a quarter of the screen: taller areas are drawn a band at a time, CV_AREA) */
 static uint16_t cv_px[CV_MAX] POOL;
 static uint32_t cv_w, cv_h;
 static int32_t cv_oy;            /* the band's top within the area being drawn (CV_AREA): drawing is placed by the area */
 static uint16_t cv_bg;
+static uint8_t cv_dust_off;
 
 static inline uint16_t swap16(uint32_t c) { return (uint16_t)(((c >> 8) & 0xFFu) | ((c & 0xFFu) << 8)); }
 
@@ -70,7 +74,25 @@ static void cv_area_next(void)
     cv_oy += (int32_t)cv_h;
 }
 #define CV_AREA(x, y, w, h, bg) for (cv_area_start(x, y, w, h, bg); cv_area_left(); cv_area_next())
-static void cv_blit(uint32_t x, uint32_t y) { lcd_blit(x, y, cv_w, cv_h, cv_px); }
+static void cv_blit(uint32_t x, uint32_t y)
+{
+    /* Static sparse dust, anchored to panel coordinates. No animation, no
+     * full-screen scan, and never inside BALLSY's original playing field. */
+    static const uint16_t col[4] = {RGB(88,0,24), RGB(0,70,88), RGB(88,68,0), RGB(0,88,28)};
+    if (!cv_dust_off && cv_bg == C_BLACK) {
+        for (uint32_t gy = y/13u; gy <= (y+cv_h-1u)/13u; gy++)
+            for (uint32_t gx = x/13u; gx <= (x+cv_w-1u)/13u; gx++) {
+                uint32_t h = (gx*73856093u) ^ (gy*19349663u) ^ 0x529afu;
+                h ^= h >> 13; h *= 0x85ebca6bu; h ^= h >> 16;
+                uint32_t px = gx*13u + h%13u, py = gy*13u + (h>>8)%13u;
+                if ((h & 3u) && px>=x && px<x+cv_w && py>=y && py<y+cv_h) {
+                    uint32_t p = (py-y)*cv_w+px-x;
+                    if (!cv_px[p]) cv_px[p] = swap16(col[(h>>16)&3u]);
+                }
+            }
+    }
+    lcd_blit(x, y, cv_w, cv_h, cv_px);
+}
 
 static void cv_rect(int32_t x, int32_t y, int32_t w, int32_t h, uint16_t c)
 {
@@ -102,6 +124,8 @@ static void cv_frame(int32_t x, int32_t y, int32_t w, int32_t h, int32_t t, uint
 static int32_t glyph(const font_t *f, uint32_t ch)
 {
     int32_t i;
+    for (i = 0; i < f->n; i++)
+        if ((uint8_t)f->chars[i] == ch) return i;
     if (ch >= 'a' && ch <= 'z')
         ch -= 32u;                    /* capitals only */
     for (i = 0; i < f->n; i++)
@@ -161,8 +185,16 @@ static int32_t cv_text(int32_t x, int32_t y, const font_t *f, const char *s, uin
     return x;
 }
 /* centred, and squeezed to the canvas's width (a few pixels less between the letters) if it is wider */
+static const font_t *text_fit_font(const font_t *f, const char *s, int32_t room)
+{
+    const font_t *sizes[] = {&FONT_L, &FONT_M, &FONT_S, &FONT_XS};
+    for (uint32_t j = 0; j < 4u && text_w(f, s) > room; j++)
+        if (sizes[j]->h < f->h) f = sizes[j];
+    return f;
+}
 static void cv_text_fit(int32_t y, const font_t *f, const char *s, uint16_t c)
 {
+    f = text_fit_font(f, s, (int32_t)cv_w - 8);
     int32_t w = text_w(f, s), n = (int32_t)str_len(s), room = (int32_t)cv_w - 4, squeeze = 0, x;
     if (w > room && n > 1)
         squeeze = (w - room + n - 2) / (n - 1);
@@ -177,7 +209,7 @@ static void cv_text_fit(int32_t y, const font_t *f, const char *s, uint16_t c)
 /* centred in the canvas's width */
 static void cv_text_c(int32_t y, const font_t *f, const char *s, uint16_t c)
 {
-    cv_text(((int32_t)cv_w - text_w(f, s)) / 2, y, f, s, c);
+    cv_text_fit(y, f, s, c);
 }
 
 /* one-shot: text in a band, cleared to black, sent (boot, crash, update, rescue) */

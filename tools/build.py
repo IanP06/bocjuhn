@@ -11,6 +11,8 @@ The JieLi toolchain is Linux x86-64 only: JIELI_TOOLCHAIN points at it; on macOS
 linux/amd64 container (Docker). AC79_SDK points at the JieLi AC79 SDK (three of its files go in the package).
 """
 import argparse
+import hashlib
+import json
 import os
 import platform
 import re
@@ -85,7 +87,7 @@ def generate():
 
 # ---- update loader (SLOOP's, unchanged)
 
-def crc16(d, c=0):
+def crc26(d, c=0):
     for b in d:
         c ^= b << 8
         for _ in range(8):
@@ -96,7 +98,7 @@ def crc16(d, c=0):
 
 def ldr_head(dcrc, a, b, attr, name):
     body = struct.pack("<HIIBBH16s", dcrc, a, b, attr, 0, 0, name)
-    return struct.pack("<H", crc16(body)) + body
+    return struct.pack("<H", crc26(body)) + body
 
 
 def ldr_wrap(image):
@@ -107,9 +109,9 @@ def ldr_wrap(image):
         if len(c) > 4096 or lz4blk.decompress(c) != raw:
             raise SystemExit(f"loader: block {i // 4096} does not compress below 4096 B")
         blocks += struct.pack("<II", len(c), len(raw)) + c
-    inner = ldr_head(crc16(image), len(image), LOADER_LOAD, 0, LOADER_NAME)
+    inner = ldr_head(crc26(image), len(image), LOADER_LOAD, 0, LOADER_NAME)
     body = inner + bytes(blocks)
-    return ldr_head(crc16(body), 0x20, len(body), 0x41, LOADER_NAME) + body
+    return ldr_head(crc26(body), 0x20, len(body), 0x41, LOADER_NAME) + body
 
 
 def build_loader():
@@ -254,8 +256,13 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--release", metavar="X.Y", help="release build: identity FM-1_7XY, version string X.Y")
     ap.add_argument("--sdk", type=Path, help="JieLi AC79 SDK checkout (default: $AC79_SDK)")
+    ap.add_argument("--interval", action="store_true", help="private bocjuhn 1.0 RC3 identity, not an upstream Tonitor release")
     a = ap.parse_args()
     name = "tonitor.fwsc"
+    if a.interval:
+        if a.release:
+            raise SystemExit("--interval and --release are mutually exclusive")
+        PRODUCT, VERSION, name = "FM-1_197100", "B103", "bocjuhn-1.0-rc3.fwsc"
     if a.release:
         m = re.fullmatch(r"(\d)\.(\d)", a.release)
         if not m:
@@ -267,6 +274,7 @@ def main():
     fm1pkg_make.sdk_file("uboot.boot")          # fail early without the SDK
     OUT.mkdir(parents=True, exist_ok=True)
     generate()
+    subprocess.run([sys.executable, str(SRC / "tools/gen_pulse.py")], cwd=SRC, check=True)
     ota = build_loader()
     img, syms, dis, rt = build_app()
     errors, notes = check(img, syms, dis, rt)
@@ -282,6 +290,13 @@ def main():
         raise SystemExit("build: checks failed")
     pkg = fm1pkg_make.ufw(fm1pkg_make.flash_image(img, fm1pkg_make.KEY), ota, PRODUCT)
     (OUT / name).write_bytes(pkg)
+    if a.interval:
+        inputs = sorted([p for p in FW.rglob('*') if p.is_file()] +
+                        list(GEN.glob('*.h')) + [Path(__file__)])
+        proof = {"file": name, "product": PRODUCT, "version": VERSION, "size": len(pkg),
+                 "sha256": hashlib.sha256(pkg).hexdigest(), "hardware_validated": False,
+                 "checks": notes, "inputs": {str(p.relative_to(SRC)): hashlib.sha256(p.read_bytes()).hexdigest() for p in inputs}}
+        (OUT / 'interval-build.json').write_text(json.dumps(proof, indent=2) + '\n')
     print(f"app      {OUT / 'tonitor.bin'}  {len(img)} B")
     print(f"package  {OUT / name}  {len(pkg)} B, identity {PRODUCT}, version {VERSION}")
     return 0

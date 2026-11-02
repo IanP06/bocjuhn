@@ -1,3 +1,7 @@
+static uint8_t clip_take_bars[LOOP_TRK];
+static uint8_t clip_art[2][BL_MAX];
+static uint8_t clip_clock_mode[3],clip_clock_div[3],clip_clock_bars;
+static int16_t clip_acid[4];
 /* SPDX-License-Identifier: GPL-3.0-only
  * TONITOR: sessions -- the whole machine at a moment: every layer's engine, both its sounds, its octave,
  * level, pan and reverb send, its loop; the reverb; the layer chosen.
@@ -20,8 +24,8 @@
 #define SES_HI 0x000E0000u
 #define SES_SECT 4096u
 #define SES_NSECT ((SES_HI - SES_LO) / SES_SECT)
-#define SES_MAGIC 0x31534341u    /* "ACS1" */
-#define SES_FORMAT 27u           /* 27: the 16 snapshots (snaps.c), the loops they hold, the morph time, PLAY ALONG, at the end; each loop's start; 26: each sound kept as its seed keeps its family too (above its path, as OBRADOR's in 25); 25: OBRADOR (an eighth sound, after HIVE in each track's; eight engines' macros and envelopes); 24: each track's modulation (two LFOs, four slots: mod.c), at the end; 23: whether each track's BALLSY and BRICKLAYER play (PLAY), at the end; 22: HIVE's sound as reworked (twelve kinds; its design larger); 21: HIVE (a seventh sound; seven engines' macros and envelopes); 20: each track's BRICKLAYER (on, its notes, length, rate, harmony, instability), at the end; 19: BAYAREA (a sixth sound; six engines' macros and envelopes); 18: each track's balls (on, how many, speed, octaves, instability), at the end; 17: DRUID (a fifth sound, five engines' macros and envelopes); 16: each track's distortion, at the end; 15: each track's own envelope on each engine, at the end; 14: each track's chord mode and form, and the chords latched, at the end; 13: the delay's parameters and each track's send to it, at the end; 12: each looper's direction and speed (in loop_state); 11: each track's own transposition; 10: the loops' transposition (and each loop's own at its recording); 9: RUSSOLO (a fourth sound, four engines' macros); 8: the granulator's character,
+#define SES_MAGIC 0x32544e49u    /* "INT2": replaced engines have a separate session/preset namespace */
+#define SES_FORMAT 32771u           /* 27: the 16 snapshots (snaps.c), the loops they hold, the morph time, PLAY ALONG, at the end; each loop's start; 26: each sound kept as its seed keeps its family too (above its path, as OBRADOR's in 25); 25: OBRADOR (an eighth sound, after HIVE in each track's; eight engines' macros and envelopes); 24: each track's modulation (two LFOs, four slots: mod.c), at the end; 23: whether each track's BALLSY and BRICKLAYER play (PLAY), at the end; 22: HIVE's sound as reworked (twelve kinds; its design larger); 21: HIVE (a seventh sound; seven engines' macros and envelopes); 20: each track's BRICKLAYER (on, its notes, length, rate, harmony, instability), at the end; 19: BAYAREA (a sixth sound; six engines' macros and envelopes); 18: each track's balls (on, how many, speed, octaves, instability), at the end; 17: DRUID (a fifth sound, five engines' macros and envelopes); 16: each track's distortion, at the end; 15: each track's own envelope on each engine, at the end; 14: each track's chord mode and form, and the chords latched, at the end; 13: the delay's parameters and each track's send to it, at the end; 12: each looper's direction and speed (in loop_state); 11: each track's own transposition; 10: the loops' transposition (and each loop's own at its recording); 9: RUSSOLO (a fourth sound, four engines' macros); 8: the granulator's character,
                                   * the latched notes; 7: the loops held out; 6: the macros; 5: the generations; 4: the paths; 3: a CALIGULA design a layer; 2: up to ten loops
                                   * a layer (1: one) */
 #define SES_MAX 73u              /* records in the list (one a sector at most) */
@@ -30,7 +34,7 @@
 #define SES_BUF (32u + 8u + NLAYER * (16u + NENG * NMAC + 2u + 36u + sizeof(fm_patch_t) + sizeof(an_design_t) + sizeof(cal_design_t) + \
                                       sizeof(rus_design_t) + sizeof(dr_design_t) + sizeof(ba_design_t) + sizeof(hv_design_t) + \
                                       sizeof(ob_design_t) + \
-                                      8u * LOOP_TRK + 4u * LOOP_N) + 4u + NLAYER + NLAYER * (2u + NKEY) + 8u + NSNAP * sizeof(snap_t))
+                                      8u * LOOP_TRK + 4u * LOOP_N) + 4u + NLAYER + NLAYER * (2u + NKEY) + 8u + NSNAP * sizeof(snap_t) + sizeof(snap_speed) + sizeof(gr_edit) + sizeof(snap_gr) + sizeof(flt_edit) + sizeof(snap_filter) + sizeof(clock_config) + sizeof(acid_edit) + sizeof(snap_clock) + sizeof(snap_acid) + sizeof(snap_art) + sizeof(bl_accent) + sizeof(bl_slide) + 2u * NLAYER * (LOOP_TRK + 1u))
 
 /* the flash, for the target (main.c) or the host test (host.c); offsets from the flash's start */
 static int ses_flash_read(uint32_t off, void *p, uint32_t n);
@@ -494,6 +498,21 @@ static void ses_emit(void)
         ses_out(r, sizeof r);
     }
     snap_emit();                                        /* (format 27: the snapshots and their tables) */
+    for (uint32_t l = 0; l < NLAYER; l++) {
+        ses_out(&loop[l].speed_pct, sizeof(uint16_t));
+        for (uint32_t k = 0; k < LOOP_TRK; k++) ses_out(&loop[l].trk[k].speed_pct, sizeof(uint16_t));
+    }
+    ses_out(gr_edit, sizeof gr_edit);
+    for (uint32_t i = 0; i < NSNAP; i++) if (snap.used & (1u << i)) {
+        ses_out(snap_speed[i], sizeof snap_speed[i]);
+        ses_out(snap_gr[i], sizeof snap_gr[i]);
+    }
+    ses_out(flt_edit, sizeof flt_edit);
+    for (uint32_t i=0;i<NSNAP;i++) if (snap.used & (1u<<i)) ses_out(snap_filter[i],sizeof snap_filter[i]);
+    ses_out(&clk,sizeof clk);
+    ses_out(acid_edit,sizeof acid_edit);
+    ses_out(bl_accent,sizeof bl_accent);ses_out(bl_slide,sizeof bl_slide);
+    for(uint32_t i=0;i<NSNAP;i++)if(snap.used&(1u<<i)){ses_out(&snap_clock[i],sizeof(clock_config));ses_out(snap_acid[i],sizeof acid_edit);ses_out(snap_art[i],sizeof snap_art[i]);}
 }
 static void ses_head_fill(ses_head_t *h, uint32_t num, uint32_t format, uint32_t len, uint16_t crc)
 {
@@ -686,6 +705,20 @@ static void pre_put_slot(uint32_t k, const pre_rec_t *r)   /* into the table in 
     memcpy(b + 8u, r->mac, NMAC);
 }
 
+/* The first 24 slots of the replaced engines have editable factory defaults.
+ * A saved user preset takes precedence; no separate bank page or flash writes. */
+static int pre_factory(uint32_t e,uint32_t slot,pre_rec_t *r)
+{
+    if((e!=ENG_BAY && e!=ENG_RUS)||slot<1||slot>24)return 0;
+    memset(r,0,sizeof *r);r->used=1;r->kind=(uint8_t)((slot-1)%6);
+    r->seed=0x49444d00u+e*1009u+slot*7919u;
+    r->word=ses_c2_word(e==ENG_BAY?3072:1536,GEN_NOW,PATH_OPEN);
+    uint32_t variant=(slot-1)/6;
+    if(e==ENG_RUS && variant) {r->mac[1]=variant==2?-28:28;r->mac[2]=variant==3?22:-12;r->mac[3]=variant==3?42:0;}
+    if(e==ENG_BAY && variant) {r->mac[0]=variant==1?24:variant==2?-20:8;r->mac[1]=variant==3?-40:12;r->mac[2]=variant==2?20:0;}
+    return 1;
+}
+
 /* engine e's slot (1 .. 64): 1 and *r if it holds a sound */
 static int pre_get(uint32_t e, uint32_t slot, pre_rec_t *r)
 {
@@ -697,12 +730,12 @@ static int pre_get(uint32_t e, uint32_t slot, pre_rec_t *r)
         return 0;
     pre_where(e, &num, &k0, &ne, &len);
     if ((i = ses_find(num)) < 0)
-        return 0;
+        return pre_factory(e,slot,r);
     ses_flash_read(SES_LO + ses.sect[i] * SES_SECT, &h, sizeof h);
     if (h.format >= 4u && h.len >= 32u && (h.len - 32u) / (PRE_SLOTS * PRE_STRIDE) < ne)
         ne = (h.len - 32u) / (PRE_SLOTS * PRE_STRIDE);   /* (written with fewer engines) */
     pre_read_slot(ses.sect[i], h.format, k0 + slot - 1u, r, ne);
-    return r->used == 1u;
+    return r->used == 1u ? 1 : pre_factory(e,slot,r);
 }
 static int pre_kind(uint32_t e, uint32_t slot)
 {
@@ -855,6 +888,8 @@ static void ses_fresh(uint32_t num)
     memset(ui.env, 0, sizeof ui.env);
     memset(ui.env_on, 0, sizeof ui.env_on);
     memset(ui.dist, 0, sizeof ui.dist);
+    clock_defaults();
+    for(uint32_t l=0;l<NLAYER;l++){acid_edit[l][0]=0;acid_edit[l][1]=70;acid_edit[l][2]=65;acid_edit[l][3]=25;}
     bb_release(NLAYER);
     bl_release(NLAYER);
     for (l = 0; l < NLAYER; l++) {
@@ -870,6 +905,8 @@ static void ses_fresh(uint32_t num)
         ui.pan[l] = PAN_DEF[l];
         ui.send[l] = SEND_DEF;
         ui.flt[l] = ui.gr[l] = ui.cr[l] = 0;
+        memset(gr_edit[l], 0, 4);
+        memset(flt_edit[l],0,2);
         ui.path[l] = PATH_OPEN;
         gran_profile(l, next_seed());
         level_pan_apply(l);
@@ -931,6 +968,8 @@ static struct {
     uint8_t ldir, lspd;
     uint8_t chord_on, chord_form;
     uint8_t dmode, rate, vary;
+    uint16_t speed_pct;
+    int8_t grain_edit[4], filter_edit[2];
     int8_t env[NENG][4];
     uint8_t env_on[NENG];
     uint32_t gseed;
@@ -986,6 +1025,12 @@ static void clip_copy(uint32_t l)
     clip.lxt = ui.lxt[l];
     clip.dmode = loop[l].dmode;
     clip.rate = loop[l].rate;
+    clip.speed_pct = loop[l].speed_pct;
+    memcpy(clip.grain_edit, gr_edit[l], 4);
+    memcpy(clip.filter_edit,flt_edit[l],2);
+    memcpy(clip_take_bars,clk.take_bars[l],sizeof clip_take_bars);
+    memcpy(clip_art[0],bl_accent[l],BL_MAX);memcpy(clip_art[1],bl_slide[l],BL_MAX);
+    memcpy(clip_clock_mode,clk.mode[l],3);memcpy(clip_clock_div,clk.div[l],3);clip_clock_bars=clk.bars[l];memcpy(clip_acid,acid_edit[l],sizeof clip_acid);
     clip.vary = loop[l].vary;
     clip.gseed = gran[l].seed;
     memcpy(clip.mac, ui.mac[l], sizeof clip.mac);
@@ -1065,6 +1110,12 @@ static void clip_paste(uint32_t l)
     memcpy(ui.env[l], clip.env, sizeof clip.env);
     memcpy(ui.env_on[l], clip.env_on, sizeof clip.env_on);
     gran_profile(l, clip.gseed);
+    memcpy(gr_edit[l], clip.grain_edit, 4);
+    memcpy(flt_edit[l],clip.filter_edit,2);
+    memcpy(clk.take_bars[l],clip_take_bars,sizeof clip_take_bars);
+    memcpy(bl_accent[l],clip_art[0],BL_MAX);memcpy(bl_slide[l],clip_art[1],BL_MAX);
+    memcpy(clk.mode[l],clip_clock_mode,3);memcpy(clk.div[l],clip_clock_div,3);clk.bars[l]=clip_clock_bars;memcpy(acid_edit[l],clip_acid,sizeof clip_acid);
+    for(uint32_t t=0;t<3;t++)clock_cancel[l][t]++;
     level_pan_apply(l);
     sound_slot_free(&fm_pub[l], &fm_use[l]);            /* the sounds, into the buffers the ISR is not using */
     sound_slot_free(&an_pub[l], &an_use[l]);
@@ -1119,6 +1170,7 @@ static void clip_paste(uint32_t l)
         lp->mute = clip.mute;
         lp->dmode = clip.dmode;
         lp->rate = clip.rate;
+    lp->speed_pct = clip.speed_pct; lp->speed_acc = 0;
         lp->vary = clip.vary;
         lp->nheld = 0;
         RING_PUBLISH();
@@ -1267,7 +1319,7 @@ static int ses_load(uint32_t i)
                 fm_buf[l][fk].gain = ses_c2_level(&h, c2[1]);
             }
             full = h.format < 3u || ui.engine[l] == ENG_ANIMA;
-            if (full && h.an_size == sizeof(an_design_t))
+            if (full && h.an_size == sizeof(an_design_t) && h.format >= 32771u)
                 ses_in(&an_buf[l][ak], sizeof(an_design_t));
             else if (full) {                            /* (its seed: the first 4 bytes) */
                 ses_in(c2, 4u);
@@ -1295,6 +1347,11 @@ static int ses_load(uint32_t i)
                 ses_in(c2, sizeof c2);
                 cal_design(&cal_buf[l][ck], ses_c2_kind(&h, c2[1]), c2[0], ses_c2_path(&h, c2[1]), ses_c2_gen(&h, c2[1]));
                 cal_buf[l][ck].out = ses_c2_level(&h, c2[1]);
+            }
+            if (h.format < 32770u) {
+                cal_design_t *d=&cal_buf[l][ck];
+                uint32_t seed=d->seed, path=d->path, gen=d->gen; int32_t kind=d->kind;
+                cal_design(d,kind,seed,path,gen);
             }
             if (h.format < 9u) {                        /* (before RUSSOLO: one drawn anew) */
                 rus_design(&rus_buf[l][rk], -1, ui.seed = ui.seed * 1664525u + 1013904223u + fm1_ticks(), ui.path[l], GEN_NOW);
@@ -1611,8 +1668,58 @@ static int ses_load(uint32_t i)
         snap_load();                                    /* the snapshots (before format 27: none) */
     }
     for (l = 0; l < NLAYER; l++) {
+        loop[l].speed_pct = 100; loop[l].speed_acc = 0;
+        for (k = 0; k < LOOP_TRK; k++) { loop[l].trk[k].speed_pct = 100; loop[l].trk[k].speed_acc = 0; }
+    }
+    memset(snap_speed, 0, sizeof snap_speed);
+    memset(gr_edit, 0, sizeof gr_edit);
+    memset(snap_gr, 0, sizeof snap_gr);
+    memset(flt_edit,0,sizeof flt_edit);
+    memset(snap_filter,0,sizeof snap_filter);
+    if (h.format >= 32769u) {
+        for (l = 0; l < NLAYER; l++) {
+            ses_in(&loop[l].speed_pct, sizeof(uint16_t)); loop[l].speed_pct = (uint16_t)loop_pct(loop[l].speed_pct);
+            for (k = 0; k < LOOP_TRK; k++) {
+                ses_in(&loop[l].trk[k].speed_pct, sizeof(uint16_t));
+                loop[l].trk[k].speed_pct = (uint16_t)loop_pct(loop[l].trk[k].speed_pct);
+            }
+        }
+        ses_in(gr_edit, sizeof gr_edit);
+        for (uint32_t j = 0; j < NSNAP; j++) if (snap.used & (1u << j)) {
+            ses_in(snap_speed[j], sizeof snap_speed[j]);
+            ses_in(snap_gr[j], sizeof snap_gr[j]);
+        }
+        for (l = 0; l < NLAYER; l++)
+            for (k = 0; k < 4; k++) gr_edit[l][k] = (int8_t)clampi(gr_edit[l][k], -100, 100);
+    }
+    for (l = 0; l < NLAYER; l++) {
         mac_apply(l);
         level_pan_apply(l);
+    }
+    if (h.format >= 32770u) {
+        ses_in(flt_edit,sizeof flt_edit);
+        for (uint32_t j=0;j<NSNAP;j++) if (snap.used & (1u<<j)) ses_in(snap_filter[j],sizeof snap_filter[j]);
+        for (l=0;l<NLAYER;l++) {
+            flt_edit[l][0]=(int8_t)clampi(flt_edit[l][0],0,3);
+            flt_edit[l][1]=(int8_t)clampi(flt_edit[l][1],0,101);
+            for (uint32_t j=0;j<NSNAP;j++) { snap_filter[j][l][0]=(int8_t)clampi(snap_filter[j][l][0],0,3); snap_filter[j][l][1]=(int8_t)clampi(snap_filter[j][l][1],0,101); }
+        }
+    }
+    clock_defaults();
+    for(uint32_t l=0;l<NLAYER;l++){acid_edit[l][0]=0;acid_edit[l][1]=70;acid_edit[l][2]=65;acid_edit[l][3]=25;}
+    for(uint32_t j=0;j<NSNAP;j++){snap_clock[j]=clk;memcpy(snap_acid[j],acid_edit,sizeof acid_edit);}
+    if(h.format>=32771u) {
+        ses_in(&clk,sizeof clk);ses_in(acid_edit,sizeof acid_edit);ses_in(bl_accent,sizeof bl_accent);ses_in(bl_slide,sizeof bl_slide);
+        for(uint32_t j=0;j<NSNAP;j++)if(snap.used&(1u<<j)){ses_in(&snap_clock[j],sizeof(clock_config));ses_in(snap_acid[j],sizeof acid_edit);ses_in(snap_art[j],sizeof snap_art[j]);}
+        clock_sanitize(&clk);clk.bpm=(uint16_t)clampi(clk.bpm,30,300);
+        for(uint32_t l=0;l<NLAYER;l++) {
+            acid_edit[l][0]=(int16_t)clampi(acid_edit[l][0],0,2);
+            acid_edit[l][1]=(int16_t)clampi(acid_edit[l][1],0,100);
+            acid_edit[l][2]=(int16_t)clampi(acid_edit[l][2],0,500);
+            acid_edit[l][3]=(int16_t)clampi(acid_edit[l][3],0,100);
+            clk.bars[l]=(uint8_t)clampi(clk.bars[l],1,64);
+            for(uint32_t t=0;t<3;t++) {clk.mode[l][t]=!!clk.mode[l][t];clk.div[l][t]=(uint8_t)clampi(clk.div[l][t],0,t?5:6);clock_cancel[l][t]++;}
+        }
     }
     ses.current = ses.num[i];
     return SES_OK;

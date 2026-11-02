@@ -62,6 +62,8 @@ typedef struct {
 
 static uint8_t gr_mem[NLAYER][GR_N] POOL;
 static gran_t gran[NLAYER];
+/* Per-track offsets around the original generated character. Zero is upstream. */
+static int8_t gr_edit[NLAYER][4]; /* SIZE, DENSITY, SCATTER, FEEDBACK: -100 .. 100 */
 
 static inline int32_t gr_dec(uint8_t b)
 {
@@ -106,6 +108,7 @@ static void gran_profile(uint32_t l, uint32_t seed)
 static void gran_init(void)
 {
     uint32_t l, i;
+    memset(gr_edit, 0, sizeof gr_edit);
     for (l = 0; l < NLAYER; l++) {
         memset(&gran[l], 0, sizeof gran[l]);
         for (i = 0; i < GR_N; i++)
@@ -145,7 +148,9 @@ static void gran_spawn(gran_t *g, int32_t v, int32_t a, uint32_t len, int32_t sc
     need = rev ? 4u : (r_q16 > Q16 ? (uint32_t)(((uint64_t)len * (uint32_t)(inc - Q16 / 2)) >> 16) + 8u : 8u);
     /* .. and not so far back that the write head comes round to it: a reversed grain goes away from it, a slow
      * one falls behind it */
-    dmax = GR_N - 64u - (rev ? back + len / 2u : inc < Q16 / 2 ? (uint32_t)(((uint64_t)len * (uint32_t)(Q16 / 2 - inc)) >> 16) : 0u);
+    dmax = rev ? back + len / 2u : inc < Q16 / 2 ? (uint32_t)(((uint64_t)len * (uint32_t)(Q16 / 2 - inc)) >> 16) : 0u;
+    if (dmax >= GR_N - 80u) return; /* enlarged grains must not underflow the available history */
+    dmax = GR_N - 64u - dmax;
     if (need + 16u > dmax)
         return;
     delay = (int32_t)need + mulq15(rnd_q15(&g->r), mulq15(scat, (int32_t)(dmax - need)));
@@ -215,6 +220,12 @@ static void gran_block(uint32_t l, int32_t *x, uint32_t n, int32_t v, int any)
     }
     if (g->frozen && (!g->freeze_left-- || v >= 0))
         g->frozen = 0;
+    if (gr_edit[l][0])
+        len_ms = clampi((int32_t)(((int64_t)len_ms * exp2_q16(gr_edit[l][0] * 1310)) >> 16), 2, 500);
+    if (gr_edit[l][1])
+        int_ms = clampi((int32_t)(((int64_t)int_ms * exp2_q16(-gr_edit[l][1] * 1310)) >> 16), 1, 1000);
+    if (gr_edit[l][2]) scat = clampi(scat + gr_edit[l][2] * (Q15 / 100), 0, Q15);
+    fb = clampi(fb + gr_edit[l][3] * (Q15 / 100), 0, Q15 * 3 / 4);
     len = (uint32_t)len_ms * 441u / 10u;
     interval = (uint32_t)(int_ms > 1 ? int_ms : 1) * 441u / 10u;
     if (interval < 66u)

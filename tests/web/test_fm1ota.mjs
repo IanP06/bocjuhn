@@ -164,16 +164,16 @@ async function run(dev, fm1) {
 }
 
 {   /* a whole install, from the running firmware */
-  const fm1 = new FakeFM1("FM-1_700", "FM-1_700");
+  const fm1 = new FakeFM1("FM-1_700", product);
   const r = await run(null, fm1);
-  check(r.text === "FM-1_700", `install: ${r.err || ""} ${r.msg || ""}`);
+  check(r.text === product, `install: ${r.err || ""} ${r.msg || ""}`);
   check(JSON.stringify(Array.from(fm1.written)) === JSON.stringify(Array.from(image)), "install: the loader was not given the image");
   check(["start", "check", "loader", "write", "reboot", "done"].every((s) => r.steps.includes(s)), `install: steps ${[...new Set(r.steps)]}`);
 }
 {   /* an FM-1 left in update mode: the write is finished */
-  const fm1 = new FakeFM1("ota-FM-1_900", "FM-1_700");
+  const fm1 = new FakeFM1("ota-FM-1_900", product);
   const r = await run(null, fm1);
-  check(r.text === "FM-1_700" && !r.steps.includes("check"), `resume: ${r.err || ""} ${r.steps}`);
+  check(r.text === product && !r.steps.includes("check"), `resume: ${r.err || ""} ${r.steps}`);
 }
 {   /* another model, another firmware's loader, a stop before anything is written, a cable pulled while writing,
      * another identity after it */

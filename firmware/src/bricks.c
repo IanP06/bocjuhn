@@ -24,6 +24,8 @@
  * the looper does not record them (ui.c seq_press). */
 
 #define BL_MAX 32
+static uint32_t bl_clock_due[NLAYER], bl_clock_epoch[NLAYER], bl_clock_emit;
+static uint8_t bl_accent[NLAYER][BL_MAX], bl_slide[NLAYER][BL_MAX], bl_edit_note[NLAYER];
 #define BL_Q 24                  /* notes to come (echoes, stutters) and sounding, waiting for their time */
 
 static struct {
@@ -50,6 +52,7 @@ static struct {
 
 static void bl_defaults(uint32_t l)
 {
+    memset(bl_accent[l],0,BL_MAX);memset(bl_slide[l],0,BL_MAX);bl_edit_note[l]=0;
     bl.on[l] = bl.run[l] = bl.n[l] = bl.rec[l] = bl.pos[l] = 0;
     bl.len[l] = 0;
     bl.rate[l] = 50;
@@ -87,11 +90,16 @@ static int bl_note_at(uint32_t l, uint32_t i)
 }
 static uint32_t bl_pitch(uint32_t l, int32_t k, int32_t extra)
 {
+    if(ui.engine[l]==ENG_BAY)return 48u+((uint32_t)(bl.w[l][k]+extra)&15u);
     return scale_note(bl.w[l][k] + extra + ui.lx + ui.lxt[l], bl.o[l][k]);
 }
 /* a note of track l to strike in wait ms (0: now), for len ms, at vel (1 .. 126; 0 full) */
 static void bl_play(uint32_t l, uint32_t note, uint32_t vel, uint32_t len, uint32_t wait)
 {
+    if(clk.mode[l][CK_BRICK]) {
+        seq_clock(l,CK_BRICK,note,0,vel,bl_clock_emit+clock_from_ms(wait),clock_from_ms(len));return;
+    }
+
     uint32_t i, slot = BL_Q, f1 = ui.chord_on[l] ? ui.chord_form[l] + 1u : 0u;
     for (i = 0; i < BL_Q; i++)
         if (!bl.q[i].on) {
@@ -140,6 +148,10 @@ static void bl_step(uint32_t l, uint32_t sm)
         return;
     }
     nt = bl_pitch(l, k, 0);
+    if(ui.engine[l]==ENG_ANIMA) {
+        vel=bl_accent[l][k]?126:96;
+        if(bl_slide[l][k])gate=sm+sm/8u;
+    }
     if (bl_odds(u / 12)) {                          /* a stutter: 2 .. 4 within the step */
         uint32_t m = bl_in(2, 4), j;
         for (j = 0; j < m; j++)
@@ -189,6 +201,20 @@ static void bl_tick(void)
         int32_t u;
         if (!bl.on[l] || !bl.run[l] || !bl.n[l])
             continue;
+        if(clk.mode[l][CK_BRICK]) {
+            uint32_t grid=clock_div(l,CK_BRICK);
+            if(bl.spd[l]==LS_HALF) grid*=2; else if(bl.spd[l]==LS_DOUBLE) grid/=2;
+            if(bl_clock_epoch[l]!=clock_cancel[l][CK_BRICK] || !bl_clock_due[l]) {
+                bl_clock_epoch[l]=clock_cancel[l][CK_BRICK];bl_clock_due[l]=clock_next(960);
+            }
+            if((int32_t)(bl_clock_due[l]-clock_tick)<0) bl_clock_due[l]=clock_next(grid);
+            if((int32_t)(bl_clock_due[l]-clock_tick)<=(int32_t)grid) {
+                if(bl.len[l]<bl.n[l]) bl.len[l]=bl.n[l];
+                bl.last[l]=bl.pos[l];bl_advance(l);bl_clock_emit=bl_clock_due[l];
+                bl_step(l,clock_ms(grid));bl_clock_due[l]+=grid;
+            }
+            continue;
+        }
         if (bl.len[l] < bl.n[l])
             bl.len[l] = bl.n[l];
         if ((int32_t)(now - bl.due[l]) < 0 || (int32_t)(now - bl.hold_until[l]) < 0)
@@ -239,6 +265,7 @@ static void bl_tick(void)
 }
 static void bl_set_run(uint32_t l, int run)            /* PLAY: started from its first step, or stopped */
 {
+    clock_cancel[l][CK_BRICK]++; bl_clock_due[l]=0;
     bl.run[l] = (uint8_t)(run && bl.on[l]);
     if (bl.run[l]) {
         bl.pos[l] = bl.last[l] = 0;
@@ -262,6 +289,8 @@ static void bl_add(uint32_t l, int32_t w, int32_t o)
         return;
     bl.w[l][bl.n[l]] = (int8_t)w;
     bl.o[l][bl.n[l]] = (int8_t)o;
+    bl_accent[l][bl.n[l]]=bl_slide[l][bl.n[l]]=0;
+    bl_edit_note[l]=bl.n[l];
     bl.n[l]++;
     if (bl.len[l] < bl.n[l])
         bl.len[l] = bl.n[l];
@@ -271,6 +300,7 @@ static void bl_remove_at(uint32_t l, uint32_t k)
     for (; k + 1u < bl.n[l]; k++) {
         bl.w[l][k] = bl.w[l][k + 1u];
         bl.o[l][k] = bl.o[l][k + 1u];
+        bl_accent[l][k]=bl_accent[l][k+1];bl_slide[l][k]=bl_slide[l][k+1];
     }
     if (bl.n[l])
         bl.n[l]--;
@@ -286,6 +316,8 @@ static void bl_knob(uint32_t l, uint32_t j, int32_t s)
 {
     if (j == 0u)
         bl.len[l] = (uint8_t)clampi(bl.len[l] + s, bl.n[l] ? bl.n[l] : 1, BL_MAX);
+    else if (j == 1u && clk.mode[l][CK_BRICK])
+        clk.div[l][CK_BRICK]=(uint8_t)clampi((int)clk.div[l][CK_BRICK]+s,0,5);
     else if (j == 1u)
         bl.rate[l] = (int8_t)clampi(bl.rate[l] + 2 * s, 0, 100);
     else if (j == 2u)
@@ -306,7 +338,7 @@ static void bl_knob(uint32_t l, uint32_t j, int32_t s)
 static void draw_bl_page(void)
 {
     uint32_t l = ui.sel, i, len = bl.len[l] ? bl.len[l] : 1u, rows = (len + 7u) / 8u;
-    uint16_t col = LAYER_COL[l], fg = col;
+    uint16_t col = ui_color(l), fg = col;
     int32_t t = (int32_t)(bl.touch_until - fm1_ms) > 0 ? bl.touched : -1;
     uint32_t playing = bl.last[l];                  /* (the step just played) */
     char m[24];
@@ -318,6 +350,7 @@ static void draw_bl_page(void)
         uint32_t sps = (uint32_t)(((uint64_t)32768u * exp2_q16(clampi(bl.rate[l], 0, 100) * 3277)) >> 16);
         str_cpy(m, "RATE ", sizeof m);
         fmt_fix(m + str_len(m), (int32_t)((sps * 10u + 32768u) >> 16), 1);
+        if(clk.mode[l][CK_BRICK]) {str_cpy(m,"SYNC ",sizeof m);str_cpy(m+5,clock_label[clk.div[l][CK_BRICK]],sizeof m-5);}
     } else if (t == 2) {
         str_cpy(m, "HARMONY ", sizeof m);
         fmt_int(m + str_len(m), bl.harm[l]);

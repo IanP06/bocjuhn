@@ -164,6 +164,7 @@ static void fm1_led_key(uint32_t id, int on) { if (id < 64u) host_led[id] = (uin
 /* the flash, emulated: NOR (erased to 0xFF, programming only clears bits); erases counted */
 static uint8_t host_flash[0x100000];
 static uint32_t host_erases;
+static uint32_t host_flash_writes;
 static int ses_flash_read(uint32_t off, void *p, uint32_t n)
 {
     memcpy(p, host_flash + off, n);
@@ -182,6 +183,7 @@ static int ses_flash_prog(uint32_t off, const void *p, uint32_t n)
     uint32_t i;
     if (off < SES_LO || off + n > SES_HI)
         return -8;
+    host_flash_writes++;
     for (i = 0; i < n; i++)
         host_flash[off + i] &= ((const uint8_t *)p)[i];
     return 0;
@@ -2515,8 +2517,8 @@ static int cmd_macdiff(void)
 
 static int cmd_macros(const char *dir)
 {
-    static const uint32_t NK[4] = {FF_N, AK_N, CS_N, RK_N};
-    static const char *const EN[4] = {"FM", "ANIMA", "CALIGULA", "RUSSOLO"};
+    static const uint32_t NK[4] = {FF_N, AK_N, CS_N, FRACT_N};
+    static const char *const EN[4] = {"FM", "ANIMA", "CALIGULA", "FRACT"};
     uint32_t fail = 0, e, j, kind, s;
     char path[512];
     /* none: bit for bit */
@@ -2543,6 +2545,9 @@ static int cmd_macros(const char *dir)
     /* each macro moves each engine's sounds; the brightening ones brighten; none silences or blows up */
     for (e = 0; e < 4u; e++)
         for (j = 0; j < NMAC; j++) {
+#ifdef DROPLETS_PARTICLES
+            if (e == ENG_CAL) continue; /* dedicated particle/control tests; no RC3 COLOR macro */
+#endif
             uint32_t moved = 0, tried = 0, wrong = 0, bad = 0, nch = 0;
             static double chs[256];
             for (kind = 0; kind < NK[e]; kind++)
@@ -2578,7 +2583,7 @@ static int cmd_macros(const char *dir)
                         printf("  darker: %s %s: %.0f / %.0f / %.0f Hz\n", EN[e],
                                e == ENG_FM ? FF_NAME[kind] : e == ENG_ANIMA ? AK_NAME[kind] : e == ENG_CAL ? CS_NAME[kind] : RK_NAME[kind],
                                fl.bright, f0.bright, fh.bright);
-                    if (j == 0u && e != ENG_RUS && fh.bright <= fl.bright)   /* BRIGHT, TONE, EDGE: brighter turned up */
+                    if (((j == 0u && (e == ENG_FM || e == ENG_ANIMA)) || (j == 1u && e == ENG_CAL)) && fh.bright <= fl.bright)   /* DROPLETS uses COLOR on K2; K1 is DENSITY */
                         wrong++;
                     if (fl.peak > 8.0 * 32768 || fh.peak > 8.0 * 32768 || fl.rms < f0.rms * 0.02 || fh.rms < f0.rms * 0.02) {
                         bad++;
@@ -2602,7 +2607,7 @@ static int cmd_macros(const char *dir)
             if (moved * 10u < tried * 8u)
                 printf("FAIL macros: %s macro %u moves too few sounds\n", EN[e], j + 1), fail++;
             if (wrong * 10u > tried)
-                printf("FAIL macros: %s macro 1 does not brighten\n", EN[e]), fail++;
+                printf("FAIL macros: %s macro %u does not brighten\n", EN[e], j + 1), fail++;
             if (bad)
                 printf("FAIL macros: %s macro %u silences or blows up %u sounds\n", EN[e], j + 1, bad), fail++;
         }
@@ -3539,6 +3544,9 @@ static int cmd_tracktransp(void)
 {
     uint32_t fail = 0, n, lo, hi, c3 = scale_note(0, 0), e3 = scale_note(2, 0);
     grain_reset();
+    /* This regression asserts simultaneous overdubs: use a polyphonic engine.
+     * ACID mono priority is covered by acid_clock_test.c. */
+    ui.engine[1]=lay[1].engine=lay[1].want_engine=ENG_FM;mac_apply(1);
     memset(host_flash, 0xFF, sizeof host_flash);
     ses_scan(1);
     ui.scale = 0;
@@ -3645,6 +3653,16 @@ static uint32_t lm_sounds(uint32_t l, uint32_t note)
 }
 static void lm_key(uint32_t k)
 {
+    /* Legacy rate modes remain readable in upstream sessions. Exercise their
+     * DSP here; the replacement continuous-speed panel has its own test. */
+    if ((k == KEY_HALF || k == KEY_DOUBLE) && !(ui.bl_page && bl.on[ui.sel])) {
+        if (loop[ui.sel].play && loop[ui.sel].ntrk) {
+            uint32_t want = k == KEY_HALF ? LS_HALF : LS_DOUBLE;
+            ev_post(EV_LOOP_MODE, ui.sel, 1, loop[ui.sel].rate == want ? LS_NORMAL : want);
+        }
+        run_blocks(1, 0);
+        return;
+    }
     press_phys(k, 1);
     press_phys(k, 0);
     run_blocks(1, 0);
@@ -7402,8 +7420,12 @@ static int cmd_scaleshift(void)
     return fail ? 1 : 0;
 }
 
+#include "interval.h"
+
 int main(int argc, char **argv)
 {
+    if (argc >= 2 && !strcmp(argv[1], "interval"))
+        return cmd_interval();
     if (argc >= 3 && !strcmp(argv[1], "caligula"))
         return cmd_caligula(argv[2]);
     if (argc >= 3 && !strcmp(argv[1], "crush"))

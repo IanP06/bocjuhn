@@ -1,4 +1,16 @@
-# Tonitor licensing
+# bocjuhn licensing
+
+bocjuhn's firmware modifications, browser adapter and new visual renderer are
+GPL-3.0-only. The original Tonitor notices and component licenses below remain.
+The RC6 renderer in `firmware/src/living.h` is original code; JIANT and Teenage
+Engineering are visual references only, with no copied artwork or source.
+The current font is Liberation Sans (see `assets/fonts/Liberation-LICENSE.txt`).
+The active DROPLETS implementation uses the particle adaptation documented in
+`LICENSES/Plaits-MIT.txt`; legacy CALIGULA code retains its original attribution.
+RYUJI uses the generated sample data and macros in this repository. ACID
+replaces ANIMA in current builds; the retained ANIMA notices document ancestry.
+
+## Original Tonitor licensing and component notices
 
 The Tonitor **firmware** is free software, licensed under the GNU General Public License, version 3 only
 (`GPL-3.0-only`, full text in `LICENSE`). If you distribute it, or firmware built from it, give your

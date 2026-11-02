@@ -1,0 +1,106 @@
+bocjuhn 1.0 RC5 — ACID / CLOCK
+
+ACID reemplaza ANIMA. FRACT y los demás motores mantienen sus slots.
+El paquete requiere validación de rendimiento y sonido en el FM1 físico.
+No se ha conectado ni actualizado un dispositivo durante este desarrollo.
+
+ACID
+Voz monofónica, prioridad de la última nota y retorno a la anterior al soltarla.
+Saw/square, filtro resonante con saturación, envolvente de filtro, acento y slide.
+No pretende ser una emulación exacta de un circuito TB-303.
+
+EDIT: K1 CUTOFF, K2 RESONANCE, K3 ENV MOD, K4 DECAY.
+SEQ recorre DELAY, REVERB, MOD, PLAY ALONG, CLOCK y, si el motor seleccionado
+es ACID, la página ACID; una pulsación más vuelve a tocar.
+Página ACID: K1 WAVE (PRESET/SAW/SQUARE), K2 ACCENT (0–100), K3 SLIDE MS
+(0–500), K4 DRIVE (0–100). Son ajustes de pista, guardados en sesiones/escenas.
+El sonido de preset conserva su semilla y las cuatro macros principales.
+PRESET en WAVE usa la forma de onda de la familia elegida.
+
+Al tocar, las notas superpuestas producen legato/slide. Velocidad MIDI >=112
+activa acento; las teclas físicas usan su intensidad habitual completa.
+Con BRICKLAYER y ACID, mantener SHIFT:
+  K1 selecciona la nota de la lista (1–32, no el número de celda vacía).
+  K2 activa/desactiva su acento.
+  K3 activa/desactiva su slide hacia la nota siguiente.
+El aviso muestra número de nota, ACC y SLIDE. Funciona en FREE y SYNC.
+El slide extiende la puerta para enlazar la nota siguiente. Si hay un silencio
+entre ambas, la articulación dependerá de ese espacio.
+
+CLOCK INTERNO
+FREE es el valor predeterminado. No se habilitó clock externo ni entrada SYNC.
+La página CLOCK no activa un generador por sí misma.
+  K1 BPM global: 30–300.
+  K2 TARGET: LOOPS / BALLSY / BRICKLAYER.
+  K3 MODE: FREE / SYNC, independiente por pista y por TARGET.
+  K4 DIVISION: 1/4, 1/8, 1/8T, 1/16, 1/16T, 1/32.
+  En LOOPS también existe OFF: sigue la duración musical, sin ajustar sus notas.
+  SHIFT+K4 en LOOPS ajusta FIT a 1–64 compases de 4/4; aplica ese ajuste a
+  los loops de la pista. Las tomas nuevas hechas en SYNC recuerdan su duración
+  musical propia hasta que se cambia FIT explícitamente.
+Seleccionar otra pista mantiene CLOCK abierta y muestra su configuración.
+PLAY en CLOCK controla el TARGET seleccionado si su generador ya está activado.
+Si está apagado, muestra SEQ IS OFF. STOP cancela notas pendientes y activas.
+
+BRICKLAYER
+En FREE conserva RATE continuo y su variación temporal original.
+En SYNC los pasos siguen el pulso global; RATE también edita la subdivisión.
+Las variaciones de articulación no desplazan el reloj base del patrón.
+Su entrada en SYNC se alinea a un pulso de negra; no empieza si estaba detenido.
+
+BALLSY
+En FREE conserva el comportamiento original.
+En SYNC la física continúa; cada choque programa la nota para la próxima
+división. Por ello puede haber hasta una división de retraso entre choque
+y sonido. SPEED sigue controlando el movimiento, no sustituye DIVISION.
+En ACID, los choques coincidentes se resuelven con la última nota y el acento
+mayor; el motor sigue siendo monofónico.
+
+LOOPS
+En FREE conserva grabación, velocidades continuas y modos originales.
+En SYNC la reproducción ajusta la duración a compases. Las notas pueden
+cuantizarse a la división más cercana, conservando su duración relativa.
+Los eventos originales no se reescriben; volver a FREE recupera su timing.
+Los controles de velocidad libre quedan guardados, pero no determinan el
+tiempo mientras SYNC está activo. Se usa BPM y la duración musical FIT.
+La entrada de reproducción se alinea al siguiente compás. Cambiar FREE/SYNC
+reinicia la vista temporal; esta versión no realiza una transición continua
+sin interrupción entre ambos modos. No se cambia de modo a mitad de una toma.
+REC en SYNC arma el inicio en el siguiente compás (ARM NEXT BAR). REC durante
+la grabación solicita cerrar en la siguiente frontera de la duración elegida
+(CLOSE ON BAR). La toma recién cerrada repite desde ese límite musical.
+El monitoreo de las teclas sigue siendo inmediato.
+Reverse y pendulum recorren los eventos en el sentido correspondiente; RANDOM
+elige alturas de la toma sobre sus posiciones temporales. La variación libre
+de tiempos de VARY no se usa en esta vista sincronizada.
+
+GUARDADO Y COMPATIBILIDAD
+Formato de sesión 32771. Guarda BPM, modos/divisiones, longitudes musicales,
+ajustes ACID y acentos/slides de BRICKLAYER; también en snapshots y copia de pista.
+El BPM pertenece al proyecto y no se cambia al copiar una sola pista.
+Las escenas cambian la configuración del reloj de forma discreta, sin morph
+del BPM. El resto del morph conserva el comportamiento anterior.
+Las sesiones anteriores se abren con los nuevos modos en FREE. ANIMA pasa
+a ACID: su timbre anterior no puede conservarse. Los backups anteriores son
+necesarios para volver a ese sonido. No se garantiza que sesiones guardadas
+en RC5 se reproduzcan correctamente en una versión anterior.
+
+PALETA
+Acentos de pistas, estados y arranque más saturados. Texto principal blanco
+y fondo negro. No se añadió animación de fondo ni trabajo extra de partículas.
+
+VALIDACIÓN
+Pruebas host del firmware real, pruebas WebAssembly y compilación del target.
+La cola musical almacena notas completas con su apagado; si no hay capacidad,
+rechaza una nota completa. No garantiza polifonía ilimitada.
+El reloj avanza desde bloques de 32 muestras a 44,1 kHz: resolución de audio
+aproximada de 0,73 ms, no precisión por muestra individual.
+Pendiente: medir carga/latencia y escuchar el comportamiento en hardware real.
+
+INSTALACIÓN
+Abrir http://127.0.0.1:8766/install con el servidor local node serve.cjs activo.
+El simulador está en http://127.0.0.1:8766/.
+El instalador comprueba tamaño, identidad y SHA-256 antes de habilitar la carga.
+Exportar memoria antes de probar una versión nueva.
+Se incluye bocjuhn RC4 para volver y TONITOR original build 68.
+Recuperación: conservar la guía INSTALL-ES.txt y los paquetes anteriores.

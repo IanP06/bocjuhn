@@ -1,4 +1,8 @@
 /* SPDX-License-Identifier: GPL-3.0-only
+ * bocjuhn RC5: public synthesis/generation entry points implement ACID.
+ * Historical an_* identifiers and design/voice layout are retained for storage
+ * migration and shared probe compatibility. The legacy helper code below is
+ * retained as provenance; unreachable helpers are stripped by the build.
  * TONITOR: ANIMA, one voice a layer.
  *
  * A fixed-point port of the anima opcode of Vascular (Copyright (C) Nuno Zimas; Sources/CVascularOpcodes/src/
@@ -62,9 +66,7 @@ enum { AK_HAZE, AK_VOYAGE, AK_GLASS, AK_BELLS, AK_GOLDEN, AK_BREATH, AK_GRIT, AK
        AK_TIDE = AK_N0, AK_CHOIR, AK_SHARDS, AK_BOWL, AK_DUST, AK_MACHINE,
        AK_N1,                    /* (generations 1 and 2 draw these fourteen) */
        AK_PLUCK = AK_N1, AK_REED, AK_FOG, AK_ORGAN, AK_BITS, AK_DRIFT, AK_MURMUR, AK_HOWL, AK_N };
-static const char *const AK_NAME[AK_N] = {"HAZE", "VOYAGE", "GLASS", "BELLS", "GOLDEN", "BREATH", "GRIT", "SWARM",
-                                          "TIDE", "CHOIR", "SHARDS", "BOWL", "DUST", "MACHINE", "PLUCK", "REED", "FOG",
-                                          "ORGAN", "BITS", "DRIFT", "MURMUR", "HOWL"};
+static const char *const AK_NAME[AK_N] = {"SAW BASS","SQUARE BASS","LIQUID","RUBBER","SILVER","HOLLOW","RAZOR","DRIVE","NEEDLE","ROUND","BUBBLE","WIRE","PLUCK","REED","FOG","PULSE","BITS","DRIFT","SQUELCH","HOWL","LEAD","DEEP"};
 
 enum { MO_TAPS, MO_DRAGS, MO_ORBITS, MO_SWARM, MO_SWEEPS, MO_HOLDS };
 
@@ -160,8 +162,8 @@ AINL int32_t an_rd(const int16_t *d, uint32_t ph)
 #endif
 #define AN_SVF(c, hz, q) svf_coef(c, AN_HALF ? clampi((hz) * 2, 16, TANG_FMAX) : (hz), q)
 #ifndef AN_CACHE_N
-#define AN_CACHE_N 13u              /* (~26 KB of the pool: as many as leave it its 8 KB headroom beside CPU1's
-                                     * stacks and the two cores' buffers) */
+#define AN_CACHE_N 12u              /* INTERVAL: one fewer cached wavetable funds snapshot speeds.
+                                     * Cache misses read the identical table from flash; voices unchanged. */
 #endif
 static int16_t an_cache[AN_CACHE_N][AN_TSIZE + 1u] POOL;
 static uint16_t an_cache_tag[AN_CACHE_N];       /* the table x AN_LEVELS + its level, + 1 (0: empty) */
@@ -500,60 +502,15 @@ static int32_t an_lfo(an_voice_t *v, int shape, uint32_t p, int which)
 /* ---------------------------------------------------- note on / off --- */
 static void an_note_on(an_voice_t *v, const an_design_t *d, uint32_t inc, int fresh)
 {
-    uint32_t i, n;
-    if (fresh) {
-        v->pA = v->pB = v->pC = v->pM = v->pAM = 0;
-        for (i = 0; i < 4u; i++)
-            v->pStack[i] = 0;
-        for (i = 0; i < 3u; i++)
-            v->gr[i].on = 0;
-        v->filt.ic1 = v->filt.ic2 = v->nfilt.ic1 = v->nfilt.ic2 = v->gfilt.ic1 = v->gfilt.ic2 = 0;
-        /* (and the chain's memories: a voice taken from another note is faded out, but its comb, phaser and
-         * sample hold still hold that note -- heard again, at once and at full level, as the new one begins) */
-        v->downAcc = 0;
-        v->downHeld = 0;
-        v->phFb = 0;
-        for (i = 0; i < 4u; i++)
-            v->ap[i] = 0;
-        v->resLp = 0;
-        v->hprev = 0;
-        memset(v->res, 0, sizeof v->res);
-        v->ev = 0;
-        v->grainClock = 0x80000000u;
-    }
-    v->inc = inc;
-    v->ktmul = Q16;
-    if (d->kt) {                                     /* the filter follows the keyboard, from middle C */
-        int32_t oct = log2_q16(inc | 1u) - log2_q16(pitch_inc(60 * 16));   /* (| 1: never 0 -- and no folded constant for it) */
-        v->ktmul = (int32_t)exp2_q16(clampi((int32_t)(((int64_t)oct * d->kt) >> 8), -3 * Q16, 3 * Q16));
-    }
-    v->incB = (uint32_t)(((uint64_t)inc * exp2_q16((d->intervalB * 16 + d->detuneB / 100) * 341)) >> 16);
-    v->incM = (uint32_t)(((uint64_t)inc * (uint32_t)(d->golden ? R16(1.6180340) : d->fmRatio)) >> 16);
-    n = clampi(d->multiCount, 1, 4);
-    for (i = 0; i < n; i++) {
-        static const int32_t GOLDEN[4] = {R16(1.0), R16(1.2720196), R16(1.6180340), R16(2.0581710)};
-        uint32_t k = d->golden ? (uint32_t)GOLDEN[i] : exp2_q16(d->multiStep * (int32_t)i * 341);   /* x 4096 / 12 / 16 */
-        v->incStack[i] = (uint32_t)(((uint64_t)inc * k) >> 16);
-    }
-    {   /* 1 / (1 + 0.35 i) / sqrt(n) */
-        static const int32_t ISQ[5] = {0, LV(1.0), LV(0.7071), LV(0.5774), LV(0.5)};
-        static const int32_t FALL[4] = {LV(1.0), LV(0.7407), LV(0.5882), LV(0.4878)};
-        for (i = 0; i < 4u; i++)
-            v->stackGain[i] = mulq15(FALL[i], ISQ[n]);
-    }
-    v->resDelay = (int32_t)udiv64_32(1u << 16, 0, inc);   /* 2^48 / inc = FS / hz samples, Q16 */
-    v->resDelay = clampi(v->resDelay, 2 << 16, (int32_t)(AN_RES_N - 4u) << 16);
-    an_env_times(v, d);
-    v->est = EN_ATT;
-    v->et = 0;
-    an_land(v, d, &v->f, 0);
-    v->live = 1;
+    (void)d;
+    if (fresh || !v->live) { v->inc=inc; v->ev=Q15-1; }
+    v->incB=inc; v->est=EN_SUS; v->live=1;
+
 }
 static void an_note_off(an_voice_t *v)
 {
-    if (v->est != EN_IDLE)
-        v->est = EN_REL;
-    v->f.down = 0;
+    v->est=EN_REL; v->env_hold=0;
+
 }
 
 static void an_init(an_voice_t *v, uint32_t seed)
@@ -597,8 +554,9 @@ static uint32_t an_mac_role(const an_design_t *d)
 }
 static const char *an_mac_name(const an_design_t *d, uint32_t j)
 {
-    static const char *const ROLE[5] = {"GRAINS", "NOISE", "FM", "FORMANT", "DRIVE"};
-    return j == 0u ? "TONE" : j == 1u ? ROLE[an_mac_role(d)] : j == 2u ? "RESONATOR" : "MOTION";
+    static const char *const n[4]={"CUTOFF","RESONANCE","ENV MOD","DECAY"};
+    (void)d; return n[j&3u];
+
 }
 /* 2^(m / MAC_MAX x oct), Q16 (oct in Q16 / MAC_MAX steps: the caller's) */
 static int32_t an_mac_exp(int32_t m, int32_t oct_q16) { return (int32_t)exp2_q16(m * (oct_q16 / MAC_MAX)); }
@@ -1004,112 +962,48 @@ static uint32_t an_t_ctl, an_t_smp, an_t_n;    /* (a diagnostic build: the contr
 #endif
 static FAST int an_render(an_voice_t *v, const an_design_t *d, int32_t *out, uint32_t n)
 {
-    int32_t e0, e1, de, a0, da;
-    int64_t ms;
-#if TELEMETRY
-    uint32_t t0 = an_cache_now ? fm1_ticks() : 0u, t1 = 0;
-#endif
-    if (!v->live)
-        return 0;
-    an_control_fp(v, d);
-#if TELEMETRY
-    if (an_cache_now)
-        t1 = fm1_ticks();
-#endif
-    e0 = v->ev;
-    e1 = an_env_tick(v, d);
-    if (v->est == EN_IDLE && e0 == 0) {
-        v->live = 0;
-        return 0;
-    }
-#if AN_HALF
-    /* (the increments doubled and the delays halved for the half rate, given back after) */
-    uint32_t sv_inc = v->inc, sv_incB = v->incB, sv_incM = v->incM, sv_fml = v->incFMlevel, sv_down = v->downInc, sv_st[4];
-    int32_t sv_res = v->resDelay, sv_glen = v->gLen4;
-    {
-        uint32_t k;
-        for (k = 0; k < 4u; k++) {
-            sv_st[k] = v->incStack[k];
-            v->incStack[k] <<= 1;
+    if (!v->live) { memset(out,0,n*sizeof *out); return 0; }
+    int32_t cut=clampi(d->cutoff.lo+v->mac[0]*350,0,32767);
+    int32_t res=clampi(d->q.lo+v->mac[1]*400,0,32700);
+    int32_t em=clampi(d->fmIndex.lo+v->mac[2]*450,0,32767);
+    int32_t decay=clampi(d->dec+v->mac[3]*12,15,2000);
+    int32_t accented=v->ktmul; /* assigned from event velocity */
+    int32_t ec=clampi(cut+mulq15(v->ev,em)+mulq15(v->ev,accented?(v->am_on?v->lFM*70:5000):0),0,32767);
+    int32_t hz=60+mulq15(mulq15(ec,ec),11000);
+    int32_t target_g=(hz*32768)/(14037+hz);
+    int32_t slide=clampi(v->am_on?v->lMulti:d->multiStep,0,500);
+    int32_t target_amp=(v->est==EN_REL && !v->env_hold)?0:accented?24000+(v->am_on?v->lFM*60:6000):24000;
+    int64_t ms=0;
+    v->ev=mulq16(v->ev,65536-(237700/(uint32_t)decay));
+    if (v->ev<1) v->ev=0;
+    v->inc = slide ? (uint32_t)((int32_t)v->inc+((int32_t)v->incB-(int32_t)v->inc)/maxi(1,slide/3)) : v->incB;
+    uint32_t width=maxi(1,(int32_t)(v->inc>>16));
+    for(uint32_t i=0;i<n;i++) {
+        int32_t ph=(int32_t)(v->pA>>16), blep=0, t, x;
+        if ((uint32_t)ph<width) { t=(ph*32768)/(int32_t)width; blep=2*t-mulq15(t,t)-32768; }
+        else if ((uint32_t)ph>65536u-width) { t=((ph-65536)*32768)/(int32_t)width; blep=mulq15(t,t)+2*t+32768; }
+        x=ph-32768-blep;
+        if((v->am_on && v->lB)?v->lB==2:(d->tableA&1u)) {
+            int32_t ph2=(ph+32768)&65535, b2=0;
+            if ((uint32_t)ph2<width) { t=(ph2*32768)/(int32_t)width; b2=2*t-mulq15(t,t)-32768; }
+            else if ((uint32_t)ph2>65536u-width) { t=((ph2-65536)*32768)/(int32_t)width; b2=mulq15(t,t)+2*t+32768; }
+            x=(ph<32768?22000:-22000)+mulq15(22000,blep-b2);
         }
-        v->inc <<= 1;
-        v->incB <<= 1;
-        v->incM <<= 1;
-        v->incFMlevel <<= 1;
-        v->downInc = v->downInc >= 0x80000000u ? 0xFFFFFFFFu : v->downInc << 1;
-        v->resDelay = clampi(v->resDelay >> 1, 2 << 16, (int32_t)(AN_RES_N - 4u) << 16);
-        v->gLen4 = v->gLen4 >> 1;
-    }
-#endif
-    {   /* the wavetables this block reads (the RAM copies when there are) */
-        uint32_t k, ns = (uint32_t)clampi(d->multiCount, 1, 4);
-        if (d->oscA)
-            v->tA = an_tab(d->tableA, v->inc);
-        if (d->oscB)
-            v->tB = an_tab(d->tableB, v->incB);
-        if (d->fm)
-            v->tFM = an_tab(d->tableFM, v->incFMlevel);
-        if (v->am_on)
-            v->tAM = an_tab(d->tableAM, 0);
-        if (d->multi)
-            for (k = 0; k < ns; k++)
-                v->tM[k] = an_tab(d->tableMulti, v->incStack[k]);
-        if (d->gran)
-            for (k = 0; k < 3u; k++)
-                if (v->gr[k].on)
-                    v->gr[k].tab = an_tab(d->tableGran, v->gr[k].inc);
-    }
-#if AN_HALF
-    {
-        int32_t h[CTL / 2u], p = v->hprev;
-        uint32_t k, nh = n >> 1;
-        de = (e1 - e0) / (int32_t)nh;
-        a0 = v->ampPrev;
-        da = (v->amp - v->ampPrev) / (int32_t)nh;
-        ms = an_samples_at(v, d, h, nh, e0, de, a0, da) << 1;   /* (the mean square of twice as many) */
-        for (k = 0; k < nh; k++) {                      /* drawn out: half-way, then the sample */
-            out[2u * k] = (p + h[k]) >> 1;
-            out[2u * k + 1u] = p = h[k];
+        v->pA+=v->inc;
+        v->amp+=(target_amp-v->amp)/(target_amp?40:220);
+        if(!target_amp && v->amp<220) v->amp=0;
+        v->lA+=(target_g-v->lA)/16;
+        for(int sub=0;sub<2;sub++) {
+            int32_t y=tanh_q15(mulq15(x,32768+clampi(v->am_on?v->lNoise*327:d->shaperDrive.lo,0,32767))-mulq15(v->ap[3],res)*4);
+            for(int j=0;j<4;j++) { v->ap[j]+=mulq15(v->lA,y-v->ap[j]); y=v->ap[j]; }
         }
-        v->hprev = p;
-        for (k = 0; k < 4u; k++)
-            v->incStack[k] = sv_st[k];
-        v->inc = sv_inc;
-        v->incB = sv_incB;
-        v->incM = sv_incM;
-        v->incFMlevel = sv_fml;
-        v->downInc = sv_down;
-        v->resDelay = sv_res;
-        v->gLen4 = sv_glen;
+        out[i]=mulq15(v->ap[3],v->amp)*2;
+        ms+=(int64_t)out[i]*out[i];
     }
-#else
-    de = (e1 - e0) / (int32_t)n;
-    a0 = v->ampPrev;
-    da = (v->amp - v->ampPrev) / (int32_t)n;
-    ms = an_samples_at(v, d, out, n, e0, de, a0, da);
-#endif
-#if TELEMETRY
-    if (an_cache_now) {
-        uint32_t t2 = fm1_ticks();
-        an_t_ctl += t1 - t0;
-        an_t_smp += t2 - t1;
-        an_t_n++;
-    }
-#endif
-    {   /* AnimaCore.h: towards 0.1 RMS over seconds, never more than nine decibels either way */
-        int32_t blk = (int32_t)((ms >> 5) > 0x7FFFFFFF ? 0x7FFFFFFF : (ms >> 5)), want;
-        uint32_t root;
-        v->blkms = blk;
-        v->power += (blk - v->power) >> 12;
-        if (v->power > 16) {
-            root = isqrt32((uint32_t)v->power);                 /* Q12 */
-            want = (int32_t)(1677722u / (root ? root : 1u));    /* 0.1 / sqrt(power), Q12 */
-            want = clampi(want, IX(0.25), IX(2.8)) << 16;       /* Q28 */
-            /* (down four times as fast as up: a resonance found by the hand is caught before it rings) */
-            v->level += (want - v->level) >> (want < v->level ? 9 : 11);
-        }
-    }
-    return 1;
+    {uint64_t z=(uint64_t)ms>>6;v->blkms=(int32_t)udiv64_32((uint32_t)(z>>32),(uint32_t)z,n);}
+    if(!target_amp && !v->amp) v->live=0;
+    return v->live;
+
 }
 static __typeof__(&an_render) volatile an_render_fp = an_render;   /* (the flash's way into the RAM code) */
 
@@ -1679,672 +1573,19 @@ static void an_care3(an_design_t *d, uint32_t path, rnd_t *r)
 /* a new design of kind k (AK_N: any), from seed, on a path */
 static void an_design(an_design_t *d, int32_t k, uint32_t seed, uint32_t path, uint32_t gen)
 {
-    rnd_t rr, *r = &rr;
-    int32_t s[8];
-    path = path < PATH_N ? path : PATH_OPEN;
-    rnd_seed(r, seed);
-    {   /* (the family drawn always, a family given or not: the seed and the family then make the sound again, however
-         * the family was come to -- SHIFT + PRESETS, a preset, a session) */
-        int32_t drawn;
-        if (gen == 0u)
-            drawn = path == PATH_OPEN ? rnd_below(r, AK_N0) : (int32_t)rnd_weighted(r, AK_W[path], AK_N0);
-        else if (gen <= 2u)
-            drawn = (int32_t)rnd_weighted(r, AK_W1[path], AK_N1);
-        else
-            drawn = (int32_t)rnd_weighted(r, AK_W3[path], AK_N);
-        if (k < 0 || k >= AK_N)
-            k = drawn;
-    }
-    memset(d, 0, sizeof *d);
-    d->kind = (uint8_t)k;
-    d->path = (uint8_t)path;
-    d->gen = (uint8_t)gen;
-    d->seed = seed;
-    d->oscA = 1;
-    d->tableB = 2;
-    d->tableMulti = 2;
-    d->tableGran = 11;
-    d->intervalB = 7;
-    d->fmRatio = R16(2.0);
-    d->multiCount = 3;
-    d->multiStep = 12 * 16;
-    d->att = 20;
-    d->dec = 400;
-    d->sus = LV(0.7);
-    d->rel = 900;
-    d->levelA = d->levelB = d->levelFM = d->levelMulti = d->levelGran = d->levelNoise = AC(0);
-    d->fmIndex = AC(0);
-    d->granRate = AC(H8(12.0));
-    d->granLen = AC(MS4(60.0));
-    d->noiseCut = AC(HZ(2000));
-    d->cutoff = AC(HZ(6000));
-    d->q = AC(IX(0.8));
-    d->amRate = AC(H8(3.0));
-    d->amDepth = AC(0);
-    d->amp = AC(LV(0.8));
-    d->downRate = AC(HZ(44100));
-    d->shaperDrive = AC(IX(1.0));
-    d->phaserRate = AC(H16(0.2));
-    d->phaserDepth = AC(LV(0.5));
-    d->groupCut = AC(HZ(9000));
-    d->groupQ = AC(IX(0.7));
-    d->resFeedback = AC(LV(0.5));
-    d->resMix = AC(0);
-    d->phaserPlace = AC(LV(0.5));
-    d->travel = R16(0.15);
-    d->out = IX(0.4);
-    switch (k) {
-    /* generation 3's kinds */
-    case AK_PLUCK:     /* a plucked string: a burst through the comb tuned to the note, dying away */
-        d->tableA = rnd_chance(r, 50) ? 2 : 18;
-        d->levelA = AM(AS_SIZE, LV(0.25), LV(0.5));
-        d->noise = 1;
-        d->levelNoise = AM(AS_SIZE, LV(0.15), LV(0.35));
-        d->filter = 1;
-        d->cutoff = AMS(AS_SIZE, HZ(rnd_in(r, 700, 1600)), HZ(rnd_in(r, 4000, 9000)), -0.3);
-        d->q = AC(IX(0.8));
-        d->resonator = 1;
-        d->resMix = AC(rnd_in(r, LV(0.45), LV(0.7)));
-        d->resFeedback = AC(rnd_in(r, LV(0.84), LV(0.93)));
-        d->amp = AM(AS_SIZE, LV(0.6), LV(1.0));
-        d->att = rnd_in(r, 1, 4);
-        d->hold = 0;
-        d->dec = rnd_in(r, 120, 700);
-        d->sus = rnd_chance(r, 70) ? 0 : LV(0.15);
-        d->rel = rnd_in(r, 150, 900);
-        d->motion = MO_TAPS;
-        d->travel = R16(0.3);
-        d->out = IX(0.7);
-        break;
-    case AK_REED:      /* a reed: nasal, through a formant the hand moves, a breath in it */
-        d->tableA = 13;
-        d->levelA = AC(LV(0.5));
-        d->oscB = 1;
-        d->tableB = 3;
-        d->intervalB = rnd_chance(r, 60) ? 12 : 0;
-        d->detuneB = (int16_t)rnd_in(r, 2 * 16, 9 * 16);
-        d->levelB = AM(AS_Y, LV(0.1), LV(0.35));
-        d->groupFilter = 2;
-        d->groupCut = AMS(AS_X, HZ(rnd_in(r, 500, 900)), HZ(rnd_in(r, 1800, 3200)), -0.2);
-        d->groupQ = AC(rnd_in(r, IX(1.5), IX(4.0)));
-        d->noise = 3;
-        d->levelNoise = AM(AS_SPEED, LV(0.02), LV(0.1));
-        d->noiseCut = AM(AS_X, HZ(1200), HZ(4000));
-        d->ampMod = 1;
-        d->tableAM = 0;
-        d->amRate = AM(AS_LFO1, H8(4.0), H8(6.5));
-        d->amDepth = AC(rnd_in(r, LV(0.05), LV(0.2)));
-        d->amp = AM(AS_SIZE, LV(0.5), LV(0.9));
-        d->att = rnd_in(r, 30, 200);
-        d->dec = 600;
-        d->sus = LV(0.8);
-        d->rel = rnd_in(r, 200, 900);
-        d->motion = MO_HOLDS;
-        d->travel = R16(0.08);
-        d->out = IX(0.6);
-        break;
-    case AK_FOG:       /* a stack under fog: very filtered, a slow phaser drifting through it */
-        d->oscA = 1;
-        d->tableA = rnd_chance(r, 50) ? 0 : 16;
-        d->levelA = AC(LV(0.3));
-        d->multi = 1;
-        d->tableMulti = rnd_chance(r, 50) ? 17 : 1;
-        d->multiCount = 4;
-        d->multiStep = rnd_chance(r, 50) ? 7 * 16 : 12 * 16;
-        d->levelMulti = AM(AS_DIST, LV(0.25), LV(0.45));
-        d->filter = 1;
-        d->cutoff = AMS(AS_X, HZ(rnd_in(r, 250, 500)), HZ(rnd_in(r, 1200, 2400)), -0.3);
-        d->q = AC(IX(1.1));
-        d->noise = 2;
-        d->levelNoise = AC(LV(0.04));
-        d->noiseCut = AC(HZ(900));
-        d->phaser = 1;
-        d->phaserRate = AM(AS_LFO2, H16(0.02), H16(0.07));
-        d->phaserDepth = AC(LV(0.5));
-        d->resonator = 1;
-        d->resMix = AM(AS_COUNT, LV(0.1), LV(0.3));
-        d->resFeedback = AC(LV(0.7));
-        d->att = rnd_in(r, 900, 3000);
-        d->dec = 3000;
-        d->sus = LV(0.8);
-        d->rel = rnd_in(r, 3000, 7000);
-        d->motion = MO_DRAGS;
-        d->travel = R16(0.04);
-        d->out = IX(0.9);
-        break;
-    case AK_ORGAN:     /* drawbars: an organ's partials, a rotary tremolo, a little drive */
-        d->tableA = 5;
-        d->levelA = AC(LV(0.5));
-        d->multi = 1;
-        d->tableMulti = rnd_chance(r, 50) ? 5 : 0;
-        d->multiCount = (uint8_t)rnd_in(r, 2, 3);
-        d->multiStep = rnd_chance(r, 70) ? 12 * 16 : 19 * 16;
-        d->levelMulti = AM(AS_Y, LV(0.15), LV(0.4));
-        d->ampMod = 1;
-        d->tableAM = 0;
-        d->amRate = AM(AS_SPEED, H8(rnd_in(r, 3, 5)), H8(7.0));
-        d->amDepth = AC(rnd_in(r, LV(0.12), LV(0.35)));
-        d->shaper = 1;
-        d->shaperCurve = 0;
-        d->shaperDrive = AM(AS_SIZE, IX(1.1), IX(rnd_in(r, 2, 3)));
-        d->filter = 1;
-        d->cutoff = AM(AS_X, HZ(2500), HZ(8000));
-        d->q = AC(IX(0.7));
-        d->att = rnd_in(r, 5, 40);
-        d->dec = 300;
-        d->sus = LV(0.9);
-        d->rel = rnd_in(r, 80, 400);
-        d->motion = MO_HOLDS;
-        d->travel = R16(0.1);
-        d->out = IX(0.5);
-        break;
-    case AK_BITS:      /* pulses in few bits: the rate crushed and dragged about, folded */
-        d->tableA = rnd_chance(r, 50) ? 3 : 23;
-        d->levelA = AC(LV(0.45));
-        d->oscB = 1;
-        d->tableB = 4;
-        d->intervalB = rnd_chance(r, 50) ? 12 : 7;
-        d->levelB = AM(AS_Y, LV(0.1), LV(0.4));
-        d->down = 1;
-        d->downRate = AMS(AS_X, HZ(rnd_in(r, 500, 1500)), HZ(rnd_in(r, 4000, 9000)), -0.4);
-        d->shaper = 1;
-        d->shaperCurve = 1;
-        d->shaperDrive = AM(AS_SIZE, IX(1.3), IX(rnd_in(r, 3, 5)));
-        d->filter = 1;
-        d->cutoff = AC(HZ(9000));
-        d->att = rnd_in(r, 1, 15);
-        d->dec = rnd_in(r, 100, 500);
-        d->sus = LV(0.7);
-        d->rel = rnd_in(r, 60, 400);
-        d->motion = MO_TAPS;
-        d->travel = R16(0.35);
-        d->out = IX(0.4);
-        break;
-    case AK_DRIFT:     /* two saws drifting against each other: a slow beat, a chorus the hand moves */
-        d->tableA = rnd_chance(r, 50) ? 2 : 1;
-        d->levelA = AC(LV(0.4));
-        d->oscB = 1;
-        d->tableB = d->tableA;
-        d->intervalB = rnd_chance(r, 70) ? 0 : 12;
-        d->detuneB = (int16_t)rnd_in(r, 6 * 16, 22 * 16);
-        d->levelB = AC(LV(0.4));
-        d->multi = (uint8_t)rnd_chance(r, 50);
-        d->tableMulti = d->tableA;
-        d->multiCount = 2;
-        d->multiStep = -12 * 16;
-        d->levelMulti = AM(AS_DIST, LV(0.1), LV(0.3));
-        d->filter = 1;
-        d->cutoff = AMS(AS_Y, HZ(rnd_in(r, 600, 1200)), HZ(rnd_in(r, 3000, 6000)), -0.2);
-        d->q = AC(IX(rnd_in(r, 1, 2)));
-        d->phaser = 1;
-        d->phByHand = 1;
-        d->phaserDepth = AC(LV(0.6));
-        d->phaserPlace = AM(AS_X, 0, Q15);
-        d->att = rnd_in(r, 300, 1500);
-        d->dec = 2000;
-        d->sus = LV(0.85);
-        d->rel = rnd_in(r, 2000, 5000);
-        d->motion = MO_SWEEPS;
-        d->travel = R16(0.05);
-        d->out = IX(0.6);
-        break;
-    case AK_MURMUR:    /* a murmur: a dark cloud of noisy grains */
-        d->levelA = AC(LV(0.08));
-        d->gran = 1;
-        d->tableGran = (uint8_t)(rnd_chance(r, 50) ? 22 : rnd_chance(r, 50) ? 11 : 8);
-        d->levelGran = AM(AS_SIZE, LV(0.4), LV(0.75));
-        d->granRate = AM(AS_SPEED, H8(rnd_in(r, 12, 25)), H8(rnd_in(r, 40, 70)));
-        d->granLen = AM(AS_Y, MS4(30.0), MS4(140.0));
-        d->granSpread = rnd_in(r, LV(0.4), LV(0.8));
-        d->filter = 1;
-        d->cutoff = AMS(AS_Y, HZ(rnd_in(r, 300, 600)), HZ(rnd_in(r, 1500, 3000)), -0.3);
-        d->q = AC(IX(1.0));
-        d->resonator = 1;
-        d->resMix = AM(AS_COUNT, LV(0.15), LV(0.35));
-        d->resFeedback = AC(LV(0.7));
-        d->att = rnd_in(r, 400, 1500);
-        d->dec = 2000;
-        d->sus = LV(0.8);
-        d->rel = rnd_in(r, 2000, 5000);
-        d->motion = MO_SWARM;
-        d->travel = R16(0.12);
-        d->out = IX(0.8);
-        break;
-    case AK_HOWL:      /* a howl: noise through a resonance so sharp it whistles, swept by the hand */
-        d->levelA = AC(LV(0.1));
-        d->noise = 1;
-        d->levelNoise = AC(LV(0.35));
-        d->filter = 2;
-        d->cutoff = AMS(AS_X, HZ(rnd_in(r, 200, 500)), HZ(rnd_in(r, 2500, 6000)), -0.4);
-        d->q = AM(AS_SIZE, IX(rnd_in(r, 8, 14)), IX(rnd_in(r, 16, 25)));
-        d->shaper = 1;
-        d->shaperCurve = 0;
-        d->shaperDrive = AC(IX(1.5));
-        d->att = rnd_in(r, 80, 500);
-        d->dec = 800;
-        d->sus = LV(0.85);
-        d->rel = rnd_in(r, 400, 2000);
-        d->motion = MO_SWEEPS;
-        d->travel = R16(0.15);
-        d->out = IX(0.3);
-        break;
-    case AK_HAZE:      /* a breathed, ghostly pad */
-        d->tableA = rnd_chance(r, 50) ? 22 : 20;
-        d->oscB = 1;
-        d->tableB = rnd_chance(r, 50) ? 0 : 17;
-        d->intervalB = 12;
-        d->detuneB = (int16_t)rnd_in(r, 4 * 16, 9 * 16);
-        d->noise = 3;
-        d->levelNoise = AM(AS_SPEED, LV(0.02), LV(0.25));
-        d->noiseCut = AMS(AS_X, HZ(600), HZ(3000), -0.5);
-        d->levelA = AC(LV(0.6));
-        d->levelB = AM(AS_DIST, LV(0.15), LV(0.55));
-        d->filter = 1;
-        d->cutoff = AMS(AS_Y, HZ(400), rnd_in(r, 2500, 4000), -0.6);
-        d->q = AM(AS_SIZE, IX(0.8), IX(2.2));
-        d->amp = AMS(AS_SIZE, LV(0.35), LV(0.9), 0.3);
-        d->att = rnd_in(r, 900, 1800);
-        d->dec = 1500;
-        d->sus = LV(0.8);
-        d->rel = rnd_in(r, 2500, 4000);
-        d->phaser = (uint8_t)rnd_chance(r, 70);
-        d->phaserRate = AM(AS_LFO2, H16(0.05), H16(0.3));
-        d->phaserDepth = AC(LV(0.6));
-        d->motion = MO_HOLDS;
-        d->travel = R16(0.05);
-        d->out = IX(0.5);
-        break;
-    case AK_VOYAGE:    /* a slowly travelling, grainy stack */
-        d->oscA = 0;
-        d->multi = 1;
-        d->tableMulti = (uint8_t)(8 + rnd_below(r, 3));
-        d->multiCount = (uint8_t)(3 + rnd_below(r, 2));
-        d->multiStep = rnd_chance(r, 50) ? 12 * 16 : 7 * 16;
-        d->levelMulti = AM(AS_DIST, LV(0.6), LV(0.25));
-        d->gran = 1;
-        d->tableGran = rnd_chance(r, 50) ? 11 : 18;
-        d->levelGran = AM(AS_SPEED, LV(0.1), LV(0.6));
-        d->granRate = AMS(AS_X, H8(4.0), H8(30.0), -0.5);
-        d->granLen = AM(AS_Y, MS4(30.0), MS4(200.0));
-        d->filter = 1;
-        d->cutoff = AMS(AS_AGE, HZ(700), HZ(5000), -0.4);
-        d->q = AC(IX(1.2));
-        d->ampMod = (uint8_t)rnd_chance(r, 50);
-        d->tableAM = 1;
-        d->amRate = AM(AS_LFO1, H8(0.3), H8(2.0));
-        d->amDepth = AC(LV(0.25));
-        d->amp = AM(AS_SIZE, LV(0.4), LV(0.85));
-        d->att = rnd_in(r, 1200, 2500);
-        d->dec = 2000;
-        d->sus = LV(0.75);
-        d->rel = rnd_in(r, 3000, 5000);
-        d->shaper = (uint8_t)rnd_chance(r, 40);
-        d->shaperDrive = AM(AS_GX, IX(1.0), IX(2.2));
-        d->phaser = 1;
-        d->phaserRate = AM(AS_LFO2, H16(0.05), H16(0.25));
-        d->resonator = (uint8_t)rnd_chance(r, 50);
-        d->resMix = AM(AS_LFO2, 0, LV(0.3));
-        d->resFeedback = AC(LV(0.6));
-        d->motion = rnd_chance(r, 50) ? MO_SWEEPS : MO_ORBITS;
-        d->travel = R16(0.08);
-        d->out = IX(1.1);
-        break;
-    case AK_GLASS:     /* bright, crystalline strikes, ringing in a comb */
-        d->tableA = rnd_chance(r, 50) ? 6 : 15;
-        d->levelA = AC(LV(0.5));
-        d->fm = 1;
-        d->fmRatio = rnd_chance(r, 50) ? R16(3.0) : R16(3.5);
-        d->levelFM = AC(LV(0.6));
-        d->fmIndex = AMS(AS_SIZE, IX(0.2), IX(2.5), 0.3);
-        d->filter = 1;
-        d->cutoff = AMS(AS_X, HZ(2500), HZ(9000), -0.3);
-        d->q = AM(AS_Y, IX(1.0), IX(4.0));
-        d->amp = AM(AS_SIZE, LV(0.4), LV(0.9));
-        d->att = rnd_in(r, 3, 20);
-        d->dec = rnd_in(r, 600, 1500);
-        d->sus = LV(0.15);
-        d->rel = 1500;
-        d->resonator = 1;
-        d->resMix = AC(rnd_in(r, LV(0.12), LV(0.3)));
-        d->resFeedback = AC(LV(0.6));
-        d->motion = MO_TAPS;
-        d->travel = R16(0.1);
-        d->out = IX(0.55);
-        break;
-    case AK_BELLS:     /* struck FM bells, inharmonic */
-        d->fm = 1;
-        d->tableFM = 0;
-        d->levelFM = AC(LV(0.8));
-        {
-            static const int32_t RATIOS[5] = {R16(1.4), R16(2.76), R16(3.5), R16(1.5), R16(1.41421)};
-            d->fmRatio = RATIOS[rnd_below(r, 5)];
-        }
-        d->fmIndex = AMS(AS_AGE, IX(4.0), IX(0.4), 0.5);
-        d->tableA = 12;
-        d->levelA = AC(LV(0.25));
-        d->filter = 0;
-        d->amp = AM(AS_SIZE, LV(0.4), LV(0.9));
-        d->att = 2;
-        d->dec = rnd_in(r, 2000, 5000);
-        d->sus = 0;
-        d->rel = 3000;
-        d->phaser = (uint8_t)rnd_chance(r, 30);
-        d->motion = MO_TAPS;
-        d->travel = R16(0.05);
-        d->out = IX(0.6);
-        break;
-    case AK_GOLDEN:    /* inharmonic FM and a stack, both on the golden ratio */
-        d->golden = 1;
-        d->oscA = 0;
-        d->fm = 1;
-        d->tableFM = 0;
-        d->levelFM = AC(LV(0.7));
-        d->fmIndex = AMS(AS_SIZE, IX(0.5), IX(3.0), -0.3);
-        d->multi = 1;
-        d->tableMulti = 0;
-        d->multiCount = (uint8_t)(3 + rnd_below(r, 2));
-        d->levelMulti = AM(AS_DIST, LV(0.2), LV(0.5));
-        d->filter = 1;
-        d->cutoff = AM(AS_Y, HZ(2000), HZ(9000));
-        d->q = AC(IX(0.7));
-        d->amp = AM(AS_SIZE, LV(0.4), LV(0.85));
-        d->att = rnd_in(r, 1500, 4000);
-        d->dec = 3000;
-        d->sus = LV(0.6);
-        d->rel = rnd_in(r, 4000, 7000);
-        d->phaser = (uint8_t)rnd_chance(r, 30);
-        d->motion = MO_HOLDS;
-        d->travel = R16(0.03);
-        d->out = IX(0.4);
-        break;
-    case AK_BREATH:    /* aspirated noise through a moving band, a voice under it */
-        d->tableA = rnd_chance(r, 50) ? 7 : 20;
-        d->levelA = AM(AS_DIST, LV(0.05), LV(0.3));
-        d->noise = 3;
-        d->levelNoise = AMS(AS_SIZE, LV(0.2), LV(0.6), -0.4);
-        d->noiseCut = AMS(AS_X, HZ(300), rnd_in(r, 2500, 7000), -0.5);
-        d->filter = 2;
-        d->cutoff = AMS(AS_Y, HZ(250), rnd_in(r, 1800, 4500), -0.5);
-        d->q = AM(AS_SPEED, IX(1.5), IX(7.0));
-        d->amp = AMS(AS_SIZE, LV(0.3), LV(0.95), 0.4);
-        d->att = rnd_in(r, 400, 2500);
-        d->dec = 2500;
-        d->sus = LV(0.7);
-        d->rel = rnd_in(r, 2000, 6000);
-        d->ampMod = (uint8_t)rnd_chance(r, 40);
-        d->tableAM = 22;
-        d->amRate = AM(AS_SPEED, H8(2.0), H8(14.0));
-        d->amDepth = AM(AS_LFO1, 0, LV(0.6));
-        d->phaser = 1;
-        d->phByHand = (uint8_t)rnd_chance(r, 60);
-        d->phaserPlace = AM(AS_GX, 0, Q15);
-        d->phaserDepth = AC(LV(0.9));
-        d->resonator = (uint8_t)rnd_chance(r, 55);
-        d->resMix = AM(AS_GY, LV(0.1), LV(0.45));
-        d->resFeedback = AC(rnd_in(r, LV(0.6), LV(0.85)));
-        d->motion = MO_DRAGS;
-        d->travel = R16(0.12);
-        d->out = IX(0.5);
-        break;
-    case AK_GRIT:      /* bruit: a crushed, folded, scattered body */
-        d->tableA = (uint8_t)(8 + rnd_below(r, 3));
-        d->levelA = AC(LV(0.5));
-        d->oscB = 1;
-        d->tableB = 21;
-        d->intervalB = rnd_chance(r, 50) ? 0 : 6;
-        d->detuneB = (int16_t)rnd_in(r, 10 * 16, 40 * 16);
-        d->levelB = AM(AS_Y, LV(0.2), LV(0.5));
-        d->gran = 1;
-        d->tableGran = 19;
-        d->granSpread = rnd_in(r, LV(0.4), LV(0.9));
-        d->levelGran = AM(AS_SPEED, LV(0.1), LV(0.5));
-        d->granRate = AM(AS_X, H8(8.0), H8(60.0));
-        d->granLen = AM(AS_Y, MS4(8.0), MS4(50.0));
-        d->noise = 4;
-        d->levelNoise = AM(AS_SIZE, 0, LV(0.2));
-        d->noiseCut = AM(AS_X, HZ(2000), HZ(9000));
-        d->filter = 1;
-        d->cutoff = AMS(AS_GY, HZ(400), HZ(8000), -0.5);
-        d->q = AM(AS_SIZE, IX(1.0), IX(6.0));
-        d->amp = AM(AS_SIZE, LV(0.4), LV(0.85));
-        d->att = rnd_in(r, 10, 600);
-        d->dec = 900;
-        d->sus = LV(0.6);
-        d->rel = rnd_in(r, 400, 2500);
-        d->shaper = 1;
-        d->shaperCurve = (uint8_t)(1 + rnd_below(r, 2));
-        d->shaperDrive = AM(AS_GX, IX(1.0), IX(4.5));
-        d->down = 1;
-        d->downRate = AM(AS_LFO1, HZ(2000), HZ(22000));
-        d->motion = MO_SWARM;
-        d->travel = R16(0.25);
-        d->out = IX(0.35);
-        break;
-    case AK_TIDE:      /* waves of noise breaking over a low drone */
-        d->tableA = rnd_chance(r, 50) ? 0 : 17;
-        d->levelA = AM(AS_DIST, LV(0.35), LV(0.55));
-        d->noise = 2;
-        d->levelNoise = AMS(AS_LFO2, LV(0.02), rnd_in(r, LV(0.3), LV(0.5)), 0.5);
-        d->noiseCut = AMS(AS_LFO2, HZ(250), rnd_in(r, 1800, 4000), 0.4);
-        d->filter = 1;
-        d->cutoff = AM(AS_Y, HZ(400), HZ(2500));
-        d->q = AC(IX(0.9));
-        d->amp = AM(AS_SIZE, LV(0.5), LV(0.9));
-        d->att = rnd_in(r, 1500, 4000);
-        d->dec = 3000;
-        d->sus = LV(0.8);
-        d->rel = rnd_in(r, 4000, 8000);
-        d->phaser = 1;
-        d->phaserRate = AM(AS_LFO2, H16(0.02), H16(0.08));
-        d->phaserDepth = AC(LV(0.5));
-        d->resonator = 1;
-        d->resMix = AM(AS_LFO2, LV(0.1), LV(0.35));
-        d->resFeedback = AC(rnd_in(r, LV(0.6), LV(0.8)));
-        d->motion = MO_HOLDS;
-        d->travel = R16(0.03);
-        d->out = IX(0.8);
-        break;
-    case AK_CHOIR:     /* voices: two vowels and a stack, a formant the hand moves */
-        d->tableA = rnd_chance(r, 50) ? 7 : 20;
-        d->levelA = AC(LV(0.45));
-        d->oscB = 1;
-        d->tableB = d->tableA == 7 ? 20 : 7;
-        d->intervalB = rnd_chance(r, 60) ? 12 : 7;
-        d->detuneB = (int16_t)rnd_in(r, 4 * 16, 14 * 16);
-        d->levelB = AM(AS_Y, LV(0.2), LV(0.45));
-        d->multi = 1;
-        d->tableMulti = d->tableA;
-        d->multiCount = 3;
-        d->multiStep = rnd_chance(r, 50) ? 0 : 12 * 16;
-        d->levelMulti = AM(AS_DIST, LV(0.15), LV(0.35));
-        d->filter = 1;
-        d->cutoff = AM(AS_Y, HZ(1200), HZ(5000));
-        d->q = AC(IX(0.8));
-        d->groupFilter = 1;
-        d->groupCut = AMS(AS_X, HZ(450), HZ(2600), -0.2);
-        d->groupQ = AC(rnd_in(r, IX(1.5), IX(3.5)));
-        d->ampMod = 1;
-        d->tableAM = 0;
-        d->amRate = AM(AS_LFO1, H8(4.0), H8(6.0));
-        d->amDepth = AC(LV(0.08));
-        d->amp = AM(AS_SIZE, LV(0.45), LV(0.9));
-        d->att = rnd_in(r, 600, 2500);
-        d->dec = 2000;
-        d->sus = LV(0.85);
-        d->rel = rnd_in(r, 2500, 5000);
-        d->resonator = (uint8_t)rnd_chance(r, 50);
-        d->resMix = AM(AS_COUNT, LV(0.05), LV(0.25));
-        d->resFeedback = AC(LV(0.6));
-        d->motion = MO_SWEEPS;
-        d->travel = R16(0.06);
-        d->out = IX(0.6);
-        break;
-    case AK_SHARDS:    /* glass grains scattered off the note, crushed, ringing */
-        d->oscA = 0;
-        d->gran = 1;
-        d->tableGran = rnd_chance(r, 50) ? 6 : 12;
-        d->granSpread = rnd_in(r, LV(0.6), Q15);
-        d->levelGran = AM(AS_SIZE, LV(0.4), LV(0.8));
-        d->granRate = AMS(AS_SPEED, H8(10.0), H8(70.0), -0.3);
-        d->granLen = AM(AS_Y, MS4(4.0), MS4(25.0));
-        d->filter = 3;
-        d->cutoff = AM(AS_X, HZ(300), HZ(2500));
-        d->q = AM(AS_Y, IX(0.8), IX(3.0));
-        d->down = 1;
-        d->downRate = AM(AS_GX, HZ(3000), HZ(20000));
-        d->amp = AM(AS_SIZE, LV(0.45), LV(0.9));
-        d->att = rnd_in(r, 2, 60);
-        d->dec = 800;
-        d->sus = LV(0.7);
-        d->rel = rnd_in(r, 600, 2500);
-        d->resonator = 1;
-        d->resMix = AM(AS_GY, LV(0.15), LV(0.5));
-        d->resFeedback = AC(rnd_in(r, LV(0.7), LV(0.9)));
-        d->motion = MO_TAPS;
-        d->travel = R16(0.2);
-        d->out = IX(0.7);
-        break;
-    case AK_BOWL:      /* a singing bowl: an inharmonic hum, beating, in a ringing comb */
-        d->tableA = 0;
-        d->levelA = AC(LV(0.5));
-        d->fm = 1;
-        d->tableFM = 0;
-        {
-            static const int32_t RATIOS[4] = {R16(2.76), R16(5.40), R16(1.41421), R16(3.17)};
-            d->fmRatio = RATIOS[rnd_below(r, 4)];
-        }
-        d->levelFM = AC(LV(0.45));
-        d->fmIndex = AMS(AS_SIZE, IX(0.2), IX(1.2), 0.3);
-        d->filter = 1;
-        d->cutoff = AM(AS_Y, HZ(1500), HZ(7000));
-        d->q = AC(IX(0.8));
-        d->ampMod = 1;
-        d->tableAM = 0;
-        d->amRate = AM(AS_LFO2, H8(0.3), H8(1.6));
-        d->amDepth = AC(rnd_in(r, LV(0.2), LV(0.4)));
-        d->amp = AM(AS_SIZE, LV(0.5), LV(0.9));
-        d->att = rnd_in(r, 30, 400);
-        d->dec = rnd_in(r, 3000, 7000);
-        d->sus = LV(0.55);
-        d->rel = rnd_in(r, 4000, 8000);
-        d->resonator = 1;
-        d->resMix = AM(AS_COUNT, LV(0.2), LV(0.45));
-        d->resFeedback = AC(rnd_in(r, LV(0.75), LV(0.9)));
-        d->motion = MO_ORBITS;
-        d->travel = R16(0.04);
-        d->out = IX(0.6);
-        break;
-    case AK_DUST:      /* sparse crackle over a dark, hollow drone */
-        d->tableA = rnd_chance(r, 50) ? 14 : 1;
-        d->levelA = AM(AS_DIST, LV(0.3), LV(0.5));
-        d->gran = 1;
-        d->tableGran = 11;
-        d->granSpread = rnd_in(r, LV(0.7), Q15);
-        d->levelGran = AM(AS_SPEED, LV(0.2), LV(0.5));
-        d->granRate = AM(AS_X, H8(1.5), H8(9.0));
-        d->granLen = AM(AS_Y, MS4(3.0), MS4(14.0));
-        d->filter = 1;
-        d->cutoff = AM(AS_Y, HZ(350), HZ(1600));
-        d->q = AC(IX(1.1));
-        d->down = (uint8_t)rnd_chance(r, 40);
-        d->downRate = AM(AS_LFO1, HZ(6000), HZ(20000));
-        d->amp = AM(AS_SIZE, LV(0.45), LV(0.85));
-        d->att = rnd_in(r, 400, 2500);
-        d->dec = 2500;
-        d->sus = LV(0.75);
-        d->rel = rnd_in(r, 3000, 6000);
-        d->resonator = (uint8_t)rnd_chance(r, 50);
-        d->resMix = AM(AS_LFO2, 0, LV(0.3));
-        d->resFeedback = AC(LV(0.65));
-        d->motion = MO_HOLDS;
-        d->travel = R16(0.05);
-        d->out = IX(0.7);
-        break;
-    default:           /* AK_MACHINE: a pulsing, folded mechanism */
-        d->tableA = rnd_chance(r, 50) ? 23 : 4;
-        d->levelA = AC(LV(0.55));
-        d->oscB = 1;
-        d->tableB = 21;
-        d->intervalB = rnd_chance(r, 50) ? -12 : 7;
-        d->detuneB = (int16_t)rnd_in(r, 0, 20 * 16);
-        d->levelB = AM(AS_Y, LV(0.1), LV(0.4));
-        d->ampMod = 1;
-        d->tableAM = rnd_chance(r, 50) ? 3 : 23;
-        d->amRate = AM(AS_SPEED, rnd_in(r, H8(3.0), H8(8.0)), rnd_in(r, H8(10.0), H8(22.0)));
-        d->amDepth = AC(rnd_in(r, LV(0.7), LV(1.0)));
-        d->shaper = 1;
-        d->shaperCurve = 1;
-        d->shaperDrive = AM(AS_GX, IX(1.5), IX(5.0));
-        d->down = (uint8_t)rnd_chance(r, 60);
-        d->downRate = AM(AS_LFO1, HZ(2500), HZ(16000));
-        d->filter = 1;
-        d->cutoff = AMS(AS_X, HZ(500), HZ(7000), -0.4);
-        d->q = AM(AS_Y, IX(1.0), IX(5.0));
-        d->amp = AM(AS_SIZE, LV(0.45), LV(0.85));
-        d->att = rnd_in(r, 5, 80);
-        d->dec = 900;
-        d->sus = LV(0.7);
-        d->rel = rnd_in(r, 300, 1500);
-        d->resonator = (uint8_t)rnd_chance(r, 50);
-        d->resMix = AM(AS_COUNT, LV(0.1), LV(0.4));
-        d->resFeedback = AC(LV(0.7));
-        d->motion = MO_TAPS;
-        d->travel = R16(0.15);
-        d->out = IX(0.45);
-        break;
-    case AK_SWARM:     /* iterative clouds, a tremolo of grains in a ring */
-        d->oscA = 0;
-        d->gran = 1;
-        d->tableGran = (uint8_t)(rnd_chance(r, 50) ? 12 : 6);
-        d->granSpread = rnd_in(r, LV(0.2), LV(0.7));
-        d->levelGran = AM(AS_SIZE, LV(0.3), LV(0.8));
-        d->granRate = AMS(AS_SPEED, H8(12.0), H8(90.0), -0.3);
-        d->granLen = AM(AS_Y, MS4(6.0), MS4(45.0));
-        d->multi = 1;
-        d->tableMulti = 15;
-        d->multiCount = 3;
-        d->multiStep = 7 * 16;
-        d->levelMulti = AM(AS_DIST, 0, LV(0.3));
-        d->filter = 1;
-        d->cutoff = AMS(AS_X, HZ(900), HZ(9000), -0.4);
-        d->q = AC(IX(1.5));
-        d->ampMod = 1;
-        d->tableAM = 4;
-        d->amRate = AM(AS_Y, H8(6.0), H8(22.0));
-        d->amDepth = AM(AS_LFO1, LV(0.3), LV(0.9));
-        d->amp = AM(AS_SIZE, LV(0.45), LV(0.9));
-        d->att = rnd_in(r, 200, 1500);
-        d->dec = 1200;
-        d->sus = LV(0.65);
-        d->rel = rnd_in(r, 1500, 4000);
-        d->resonator = 1;
-        d->resMix = AM(AS_COUNT, LV(0.15), LV(0.5));
-        d->resFeedback = AC(LV(0.7));
-        d->motion = MO_SWARM;
-        d->travel = R16(0.2);
-        d->out = IX(0.9);
-        break;
-    }
-    an_vary_design(d, r);
-    an_route(d, r);
-    an_path_sliders(s, path, r);
-    an_sliders(d, s);
-    d->lfo1 = rnd_in(r, H16(0.1), H16(0.6));
-    d->lfo2 = rnd_in(r, H16(0.03), H16(0.12));
-    d->lfo1Shape = (uint8_t)rnd_below(r, 3);
-    d->lfo2Shape = 2;
-    an_path_finish(d, path, r);
-    if (gen >= 1u)
-        an_care1(d, path, r);
-    if (gen >= 3u)
-        an_care3(d, path, r);
-    /* a struck kind held is a struck kind: the drone mode of Anima holds it, a key does not */
-    if (d->att < 1)
-        d->att = 1;
-    if (d->dec < 30)
-        d->dec = 30;
-    if (d->rel < 30)
-        d->rel = 30;
+    memset(d,0,sizeof *d);
+    d->seed=seed; d->gen=gen; d->path=path < PATH_N ? path : PATH_OPEN;
+    d->kind=(uint8_t)(k<0 ? (seed^(seed>>11))%AK_N : (uint32_t)k%AK_N);
+    d->tableA=d->kind&1u;
+    d->cutoff.lo=3500+(int32_t)(seed%4000u)+(d->kind>=18?5000:0);
+    d->q.lo=19000+(int32_t)((seed>>8)%10000u);
+    d->fmIndex.lo=18000+(int32_t)((seed>>16)%8000u);
+    d->dec=140+(int32_t)(seed%280u);
+    d->att=2; d->hold=0; d->sus=Q15; d->rel=35;
+    d->shaperDrive.lo=7000+(int32_t)((seed>>12)%9000u);
+    d->multiStep=65; /* slide milliseconds */
+    d->out=Q15;
+
 }
 
 /* the design's level (its out) set from how loud it usually is -- the 75th percentile of 12 ms windows
@@ -2357,39 +1598,6 @@ static an_voice_t an_probe POOL;
 #define AN_PROBE_WIN 16u         /* blocks a window */
 static void an_measure(an_design_t *d)
 {
-    static int32_t win[2u * AN_PROBE_BLOCKS / AN_PROBE_WIN];
-    int32_t out[CTL];
-    uint32_t b, k, nwin = 0, p;
-    int64_t acc;
-    for (p = 0; p < 2u; p++) {
-        an_init(&an_probe, 0x9E37u + p);
-        an_note_on(&an_probe, d, pitch_inc((p ? 69 : 48) * 16), 1);
-        acc = 0;
-        for (b = 0; b < AN_PROBE_BLOCKS; b++) {
-            if (!an_render_fp(&an_probe, d, out, CTL))
-                break;
-            acc += an_probe.blkms;
-            if ((b % AN_PROBE_WIN) == AN_PROBE_WIN - 1u) {
-                if (nwin < NELEM(win))
-                    win[nwin++] = (int32_t)((acc >> 4) > 0x7FFFFFFF ? 0x7FFFFFFF : (acc >> 4));   /* / AN_PROBE_WIN */
-                acc = 0;
-            }
-#ifndef HOST
-            if ((b & 255u) == 255u)
-                fm1_wdt_feed();
-#endif
-        }
-    }
-    for (b = 1; b < nwin; b++)                 /* (a few hundred: an insertion sort) */
-        for (k = b; k > 0 && win[k - 1] > win[k]; k--) {
-            int32_t t = win[k];
-            win[k] = win[k - 1];
-            win[k - 1] = t;
-        }
-    {
-        uint32_t root = nwin ? isqrt32((uint32_t)win[nwin * 3u / 4u]) : 0;   /* Q12 */
-        int32_t g = root ? (int32_t)(1677722u / root) : 4096 * 8;   /* to 0.1 RMS, Q12 */
-        g = clampi(g, 300, 4096 * 8);
-        d->out = clampi((int32_t)(((int64_t)d->out * g) >> 12), 40, IX(30.0));
-    }
+    d->out=Q15;
+
 }

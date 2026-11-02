@@ -93,6 +93,8 @@ static void bb_start(uint32_t l)
 /* every note of track l playing, let go (all tracks if l is NLAYER) */
 static void bb_release(uint32_t l)
 {
+    for(uint32_t c=0;c<NLAYER;c++) if(l>=NLAYER || c==l) clock_cancel[c][CK_BALL]++;
+
     uint32_t i;
     for (i = 0; i < BB_OFFS; i++)
         if (bb.off[i].at && (l >= NLAYER || bb.off[i].layer == l)) {
@@ -103,6 +105,7 @@ static void bb_release(uint32_t l)
 /* the note of segment s of wall j (0 bottom, 1 left, 2 top, 3 right) on track l */
 static uint32_t bb_note(uint32_t l, uint32_t j, uint32_t s)
 {
+    if(ui.engine[l]==ENG_BAY)return (uint32_t)(48+16*(bb.base[l]+1))+(j&3u)*4u+(s*4u/SCALE_N[ui.scale]);
     return scale_note((int32_t)s + ui.lx + ui.lxt[l], bb.base[l] + (int32_t)j);
 }
 /* a hit: segment s of wall j sounds on track l (as a key: chords too), and lights */
@@ -110,6 +113,11 @@ static void bb_hit(uint32_t l, uint32_t j, uint32_t s)
 {
     uint32_t i, slot = 0, f1 = ui.chord_on[l] ? ui.chord_form[l] + 1u : 0u, note = bb_note(l, j, s);
     uint32_t len = (50u * exp2_q16(rnd_in(&bb.r, 0, 322000))) >> 16;   /* 50 ms .. 1.5 s (x 2^4.9) */
+    if(clk.mode[l][CK_BALL]) {
+        uint32_t grid=clock_div(l,CK_BALL);
+        seq_clock(l,CK_BALL,note,f1,(uint32_t)rnd_in(&bb.r,40,126),clock_next(grid),clock_from_ms(len));
+        bb.lit[l][j][s%SCALE_MAXN]=(fm1_ms+150u)|1u;bb.hits[j]++;return;
+    }
     for (i = 0; i < BB_OFFS; i++) {                 /* the same note sounding: let go first (struck again) */
         if (bb.off[i].at && bb.off[i].layer == l && bb.off[i].note == note) {
             seq_press(l, note, bb.off[i].form, 0);
@@ -265,7 +273,7 @@ static void bb_fmt_oct(char *m, int32_t o)
 static void draw_bb_page(void)
 {
     uint32_t l = ui.sel, n = SCALE_N[ui.scale], j, s, k;
-    uint16_t col = LAYER_COL[l];
+    uint16_t col = ui_color(l);
     char m[24];
     int32_t t = (int32_t)(bb.touch_until - fm1_ms) > 0 ? bb.touched : -1;
     m[0] = 0;
@@ -284,6 +292,7 @@ static void draw_bb_page(void)
         str_cpy(m, "INSTABILITY ", sizeof m);
         fmt_int(m + str_len(m), bb.unst[l]);
     }
+    cv_dust_off = 1;
     cv_begin(240, BB_Y0 - 4, C_BLACK);
     if (text_w(&FONT_S, m) <= 236 + 2 * ((int32_t)str_len(m) - 1))   /* (squeezed a little at most; else smaller) */
         cv_text_fit(0, &FONT_S, m, col);
@@ -313,8 +322,9 @@ static void draw_bb_page(void)
             int32_t cy = BB_Y0 + (int32_t)(((int64_t)b->y * BB_H) >> 24) - oy, dy;
             static const uint8_t HW[11] = {2, 3, 4, 5, 5, 5, 5, 5, 4, 3, 2};
             for (dy = -5; dy <= 5; dy++)
-                cv_rect(cx - HW[dy + 5], cy + dy, 2 * HW[dy + 5] + 1, 1, bb.on[l] ? C_WHITE : C_GREY);
+                cv_rect(cx - HW[dy + 5], cy + dy, 2 * HW[dy + 5] + 1, 1, bb.on[l] ? ui_color(l) : C_GREY);
         }
     }
+    cv_dust_off = 0;
     bb.drawn_at = fm1_ms;
 }
