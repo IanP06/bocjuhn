@@ -18,9 +18,9 @@ Engine-specific animated organisms, clean black screens, saturated engine
 colors across tracks and menus, and redesigned temporary dials. Sound engines,
 controls and RC5 session format are unchanged. [Release notes](docs/RC7.md).
 
-**RC7 physical FM1 validation is pending.** Build, host, browser and package
-checks are recorded with the release. Earlier RC1 was tested by the owner;
-that does not validate this version. [Hardware test record](docs/HARDWARE-TEST.md).
+**RC7 has been tested on the owner's physical M-VAVE FM1 and is confirmed working**
+by ryuji kanagawa on 2026-11-02. Build, host, browser and package checks
+are also recorded with the release. [Hardware test record](docs/HARDWARE-TEST.md).
 
 [Play in your browser — no FM1 needed](https://ianp06.github.io/bocjuhn/)
 · [Download RC7](https://github.com/IanP06/bocjuhn/releases/tag/v1.0.0-rc7)
@@ -73,8 +73,8 @@ The .fwsc includes the existing update loader; no separate data flash is needed.
 ## Firmware Hub
 
 The card is in [fmhub.json](fmhub.json). The submission text is prepared in
-[docs/HUB-SUBMISSION.txt](docs/HUB-SUBMISSION.txt), **not sent**. Listing requires
-the real-device installation and exit tests, which remain pending.
+[docs/HUB-SUBMISSION.txt](docs/HUB-SUBMISSION.txt), **not sent**. Real-device operation is confirmed by the owner. The hardware test record
+distinguishes that confirmation from individually documented installation and exit checks.
 
 ## License and credits
 

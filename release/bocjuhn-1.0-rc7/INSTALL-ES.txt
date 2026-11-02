@@ -1,5 +1,5 @@
 bocjuhn RC7 — actualización visual; audio y sesiones de RC5 conservados.
-Prueba física RC7 PENDIENTE. Consultar docs/HARDWARE-TEST.md.
+RC7 probado en el FM1 físico del propietario; funcionamiento confirmado el 2026-11-02. Consultar docs/HARDWARE-TEST.md.
 
 bocjuhn 1.0 RC7 — ACID / CLOCK
 

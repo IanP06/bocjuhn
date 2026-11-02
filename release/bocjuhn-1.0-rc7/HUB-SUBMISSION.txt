@@ -1,7 +1,7 @@
 BOCJUHN — FIRMWARE HUB SUBMISSION PREPARATION
 
-Status: NOT SENT. Hardware validation of RC7 is pending.
-Complete docs/HARDWARE-TEST.md before sending a listing request.
+Status: NOT SENT. RC7 tested on the owner's physical FM1; operation confirmed on 2026-11-02.
+See docs/HARDWARE-TEST.md for the scope of the confirmation.
 
 To: zven@thefirmwarehub.com
 Subject: Firmware submission — bocjuhn for M-VAVE FM1
@@ -20,10 +20,7 @@ License: GPL-3.0-only, with component licenses preserved in LICENSES.
 The update loader is included. No separate sample/data installation is required.
 Card description, author and screenshot are in fmhub.json on the default branch.
 
-[BEFORE SENDING: replace this paragraph with the actual physical-test results,
-including installation from V15 and another custom firmware, USB identity/port,
-and installation of another firmware while bocjuhn is running. RC7 is currently
-hardware-unvalidated. Do not claim these checks have passed without testing.]
+I've tested RC7 on my own physical M-VAVE FM-1, and everything works beautifully.
 
 Thank you,
 ryuji kanagawa

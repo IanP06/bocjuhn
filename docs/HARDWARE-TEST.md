@@ -1,22 +1,17 @@
 # RC7 — registro de prueba en FM1
 
-Estado: **PENDIENTE**. Completar con el archivo de la release y su SHA-256.
-Las pruebas de software no sustituyen este registro.
+Estado: **PROBADO EN FM1 REAL — FUNCIONAMIENTO CONFIRMADO POR EL PROPIETARIO**.
 
-- Fecha, equipo y SHA-256 del paquete:
-- Backup del FM1 físico exportado y conservado:
-- Instalación desde el firmware oficial V15, arranque y audio:
-- Instalación desde otro firmware personalizado, arranque y audio:
-- Con RC7 ejecutándose, instalación de otro firmware por su actualizador normal:
-- USB MIDI reconocido; identidad FM-1_197100 y versión B107:
-- Reinstalación de RC7, guardado, apagado y recuperación de sesión:
-- Seis pistas, loops, BALLSY, BRICKLAYER, PLAY ALONG, efectos y clock:
-- Diales: K1–K4, SHIFT, EDIT, valores, unidades y regreso automático:
-- Pantallas: ocho organismos, colores al cambiar motor/pista, batería/octavas,
-  estados de grabación, mensajes y ausencia de restos gráficos:
-- Audio exigente con animación: cortes, latencia, notas colgadas o artefactos:
-- Recuperación de actualización interrumpida: pendiente de prueba controlada
-  con el procedimiento de recuperación preparado; no inferir de una instalación normal.
+Confirmación recibida el 2026-11-02 de ryuji kanagawa: RC7 fue probado en su
+propio M-VAVE FM1 físico y «funciona todo de perlas».
 
-Requisitos del Hub consultados el 2026-11-02:
-https://thefirmwarehub.com/submit/ y https://thefirmwarehub.com/kb/#loader
+- Versión: bocjuhn 1.0 RC7; identidad prevista FM-1_197100 / B107.
+- Resultado comunicado: funcionamiento general correcto en el equipo real.
+- Evidencia: confirmación directa del propietario; no es una inferencia de las pruebas de software.
+
+La confirmación general no detalla por separado la instalación desde V15,
+la instalación desde otro firmware, la salida mediante el actualizador,
+la comprobación de identidad USB ni la recuperación de una actualización
+interrumpida. Esos procedimientos no se registran aquí como pruebas individuales aprobadas.
+
+Requisitos del Hub: https://thefirmwarehub.com/submit/

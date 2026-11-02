@@ -26,11 +26,14 @@ are preserved. Browser memory and physical FM1 memory are separate.
 - Package: `bocjuhn-1.0-rc7.fwsc`, including the update loader.
 - Source, software checks, hashes and installation instructions accompany the release.
 
-## Physical validation: pending
+## Physical validation: confirmed by the owner
 
-RC7 has not been validated on a physical FM1. Software tests do not measure device
-timing or validate flashing. Complete HARDWARE-TEST.md with this exact package before
-submitting to Firmware Hub. Export a device backup before changing firmware.
+On 2026-11-02, ryuji kanagawa confirmed that RC7 was tested on their own physical
+M-VAVE FM-1 and that everything works correctly. This is a real-device owner
+confirmation, in addition to the recorded software checks.
+
+The confirmation covers overall operation; individual installation routes and
+interrupted-update recovery were not separately documented. See HARDWARE-TEST.md.
 
 ## Credits
 
