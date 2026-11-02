@@ -2367,13 +2367,21 @@ static void draw_dial(void)
     CV_AREA(0,0,240,240,C_BLACK) {
         char track[3]={'T',(char)('1'+ui.sel),0};
         cv_text(8,3,&FONT_XS,track,col);
-        cv_text_c(30,tf,t,col);
-        for(k=-45;k<=45;k+=3){
-            int32_t x,y,xx,yy;uint32_t ang=(uint32_t)(k*35791394);
-            dial_at(ang,67,&x,&y);dial_at(ang,73,&xx,&yy);
-            living_line(x,y,xx,yy,v && k>=from && k<=to?col:RGB(64,64,64));
+        cv_text_c(20,tf,t,col);
+        /* Continuous ribbon, separated inner needle and luminous endpoint. */
+        for(k=-135;k<135;k++){
+            uint32_t ang=(uint32_t)(k*11930465);
+            uint32_t next=ang+11930465u;
+            uint16_t c=v && k>=from*3 && k<to*3?col:RGB(40,40,40);
+            for(int32_t r=70;r<=73;r++){
+                int32_t x,y,xx,yy;
+                dial_at(ang,r,&x,&y);dial_at(next,r,&xx,&yy);
+                living_line(x,y,xx,yy,c);cv_rect(x,y,2,2,c);
+            }
         }
-        {int32_t x,y;dial_at(av,70,&x,&y);cv_rect(x-2,y-2,5,5,C_WHITE);}
+        {int32_t x,y,xx,yy;
+         dial_at(av,59,&x,&y);dial_at(av,65,&xx,&yy);living_line(x,y,xx,yy,col);
+         dial_at(av,72,&x,&y);cv_rect(x-2,y-2,5,5,C_WHITE);}
         cv_text_c(110,text_fit_font(&FONT_M,m,118),m,v?col:C_GREY);
     }
     ui.shown_dial = (int16_t)(v + ui.dial * 256);

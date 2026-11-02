@@ -320,9 +320,10 @@ static void draw_bb_page(void)
             const bb_ball_t *b = &bb.b[l][k];
             int32_t cx = BB_X0 + (int32_t)(((int64_t)b->x * BB_W) >> 24);
             int32_t cy = BB_Y0 + (int32_t)(((int64_t)b->y * BB_H) >> 24) - oy, dy;
+            static const uint16_t palette[6]={RGB(255,48,72),RGB(0,255,72),RGB(51,123,255),RGB(0,234,255),RGB(255,37,218),RGB(255,230,0)};
             static const uint8_t HW[11] = {2, 3, 4, 5, 5, 5, 5, 5, 4, 3, 2};
             for (dy = -5; dy <= 5; dy++)
-                cv_rect(cx - HW[dy + 5], cy + dy, 2 * HW[dy + 5] + 1, 1, bb.on[l] ? ui_color(l) : C_GREY);
+                cv_rect(cx - HW[dy + 5], cy + dy, 2 * HW[dy + 5] + 1, 1, bb.on[l] ? palette[k%6u] : C_GREY);
         }
     }
     cv_dust_off = 0;

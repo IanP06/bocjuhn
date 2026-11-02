@@ -1,0 +1,69 @@
+tables: build/gen/tonitor_tables.h
+font XL: ttf h 82, 11489 B
+font L: ttf h 41, 10005 B
+font M: ttf h 25, 5788 B
+font S: ttf h 17, 3850 B
+font XS: ttf h 14, 2703 B
+font BRAND: ttf h 45, 1836 B
+font CREDIT: ttf h 11, 1293 B
+PULSE PCM: 46200 bytes
+RC7 living UI: eight engines, engine colors across tracks, motion, idle freeze, RNG isolation, dial return and menu screenshots PASS
+interval: ok
+flows: ok
+latch: ok
+playalong: ok
+loopmodes: ok
+looptie: ok
+tracktransp: ok
+setup: SHIFT + PRESETS: PLUCK -> MALLET
+setup: ok
+backup: 3 records listed
+backup: ok
+presets: ok
+macros FM       1: moves 54 of 54 sounds, typically by 46.5 dB
+macros FM       2: moves 54 of 54 sounds, typically by 21.2 dB
+macros FM       3: moves 54 of 54 sounds, typically by 28.9 dB
+macros FM       4: moves 54 of 54 sounds, typically by 6.1 dB
+macros ANIMA    1: moves 44 of 44 sounds, typically by 58.0 dB
+macros ANIMA    2: moves 44 of 44 sounds, typically by 7.0 dB
+macros ANIMA    3: moves 44 of 44 sounds, typically by 13.2 dB
+macros ANIMA    4: moves 44 of 44 sounds, typically by 14.1 dB
+macros FRACT    1: moves 12 of 12 sounds, typically by 18.8 dB
+macros FRACT    2: moves 12 of 12 sounds, typically by 34.6 dB
+macros FRACT    3: moves 12 of 12 sounds, typically by 35.0 dB
+macros FRACT    4: moves 12 of 12 sounds, typically by 23.0 dB
+macros: ok
+overdubs: ok
+snaps: the morph in 38 steps of 50 ms, the pitch and loops at 19
+snaps: ok
+balls: one ball, speed 50, 10 s: 7 hits (bottom 2, left 2, top 2, right 1), peak -8.2 dB
+balls: instability 80: the way a ball covers in 100 ms, 0.021 .. 0.394 boxes
+balls: four balls, speed 70, instability 80, 30 s: bottom 44, left 51, top 47, right 51
+balls: ok
+bricks: 3 notes in 8 steps, rate 50 (353 ms a step), 4 s: 5 struck, 3 pitches
+bricks: harmony 100, 4 s: 10 struck, 5 pitches
+bricks: variation 100: notes a second from 0 to 5
+bricks: variation 100: levels 28 .. 110
+bricks: ok
+sessions: 64 saved before FULL
+sessions: the largest one, 8 sectors
+sessions: ok
+ACID/CLOCK PASS: drift, mono priority, queue cancellation, non-destructive loop, UI, persistence
+backup page: ok (4 records, 13440 bytes, out and back)
+WASM ACID/CLOCK: audio, page traversal, BPM, per-target config and track isolation PASS
+loader: image 8112 B, ota.bin 6836 B
+image 339448 B of 581564; RAM .data+.bss 96664 B of 98304; pool 317792 B of 344064
+bocjuhn-1.0-rc7.fwsc 609992 bytes; version B107 SHA256 f236284e4102d967603b0144b24afd403f51441d2ed9dd79c4d7bbf1294b8f44
+web installer: ok
+RC7 software checks PASS; physical FM1 validation pending
+check_target_ir: ok (no float, no 64-bit division, no variable 64-bit shift)
+engine 0 audio energy 90.127
+engine 1 audio energy 516.717
+engine 2 audio energy 30.145
+engine 3 audio energy 156.316
+engine 4 audio energy 170.165
+engine 5 audio energy 34.973
+engine 6 audio energy 6.902
+engine 7 audio energy 225.157
+simulator: eight engines, loops, speed, grains, macros, flash and framebuffer OK
+RC7 installer: correct hash accepted, corrupt file refused, install gated, no MIDI access on load PASS

@@ -43,3 +43,5 @@ headers; changes are noted in each file.
 | Terminus Bold 8x16 (the screen's fallback font) | SIL OFL 1.1 | `assets/fonts/ter-u16b.bdf`, `assets/fonts/Terminus-LICENSE.txt` |
 | Atkinson Hyperlegible Bold (the screen's type) | SIL OFL 1.1 | `assets/fonts/AtkinsonHyperlegible-Bold.ttf`, `assets/fonts/AtkinsonHyperlegible-OFL.txt` |
 | JieLi AC79 SDK: `uboot.boot`, `cfg_tool.bin`, `eq_cfg_hw.bin` are read from your SDK checkout at build time and placed in the package; no SDK file is in this tree | Apache-2.0 | <https://gitee.com/Jieli-Tech/fw-AC79_AIoT_SDK> |
+
+Rajdhani Medium and SemiBold (interface typography): SIL OFL 1.1; bundled in `assets/fonts` with `Rajdhani-OFL.txt`. Source: https://github.com/google/fonts/tree/main/ofl/rajdhani . Liberation Sans is retained for the bocjuhn signature and credit.

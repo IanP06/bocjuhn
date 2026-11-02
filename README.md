@@ -10,22 +10,22 @@ Each engine has its own animated organism and saturated color on black.
 Play, layer, loop and transform sounds through the FM1's physical controls
 or try the complete instrument in your browser.
 
-![DROPLETS, actual RC6 firmware screen](docs/card.png)
+![DROPLETS, actual RC7 firmware screen](docs/card.png)
 
-## Current release: 1.0 RC6 — Living instruments
+## Current release: 1.0 RC7 — Living instruments
 
 Engine-specific animated organisms, clean black screens, saturated engine
 colors across tracks and menus, and redesigned temporary dials. Sound engines,
-controls and RC5 session format are unchanged. [Release notes](docs/RC6.md).
+controls and RC5 session format are unchanged. [Release notes](docs/RC7.md).
 
-**RC6 physical FM1 validation is pending.** Build, host, browser and package
+**RC7 physical FM1 validation is pending.** Build, host, browser and package
 checks are recorded with the release. Earlier RC1 was tested by the owner;
 that does not validate this version. [Hardware test record](docs/HARDWARE-TEST.md).
 
 [Play in your browser — no FM1 needed](https://ianp06.github.io/bocjuhn/)
-· [Download RC6](https://github.com/IanP06/bocjuhn/releases/tag/v1.0.0-rc6)
+· [Download RC7](https://github.com/IanP06/bocjuhn/releases/tag/v1.0.0-rc7)
 · [Controls](ACID-CLOCK-RC5.txt)
-· [Installation and recovery](release/bocjuhn-1.0-rc6/INSTALL-ES.txt)
+· [Installation and recovery](release/bocjuhn-1.0-rc7/INSTALL-ES.txt)
 
 ## Simulator and installer
 
@@ -48,7 +48,7 @@ Reading identity does not flash a device; installation requires the browser's
 explicit install action. Use Chrome or Edge for Web MIDI installation.
 
 Back up the physical FM1 before switching firmware. Simulator Export memory
-backs up only the browser. RC6 reads RC5 sessions (32771); unrelated firmware
+backs up only the browser. RC7 reads RC5 sessions (32771); unrelated firmware
 projects and samples are not guaranteed compatible and can be overwritten.
 Earlier ANIMA sessions migrate to ACID as in RC5. See the installation guide.
 
@@ -66,8 +66,8 @@ docker run --rm -v "$PWD:/work" bocjuhn-host sh tests/living.sh
 
 The test/build script expects the 20260730.1 toolchain under build/deps/jieli;
 set JIELI_TOOLCHAIN in the script if using a different installation. The release
-builder is tools/build_living_release.py; output is build/rc6. Build metadata
-hashes the firmware and generated headers. Product FM-1_197100, version B106.
+builder is tools/build_living_release.py; output is build/rc7. Build metadata
+hashes the firmware and generated headers. Product FM-1_197100, version B107.
 The .fwsc includes the existing update loader; no separate data flash is needed.
 
 ## Firmware Hub
