@@ -6,8 +6,9 @@ Six tracks for sound exploration, free loops and clocked performance. Eight
 engines: FM, ACID, DROPLETS, FRACT, DRUID, RYUJI, HIVE and OBRADOR. Granular
 processing, filters, modulation, effects, BALLSY, BRICKLAYER and PLAY ALONG.
 
-Based on [Tonitor](https://github.com/nzimas/tonitor) by Nuno Zimas, preserving
-its performance workflow. Upstream history, credits and licenses are retained.
+Each engine has its own animated organism and saturated color on black.
+Play, layer, loop and transform sounds through the FM1's physical controls
+or try the complete instrument in your browser.
 
 ![DROPLETS, actual RC6 firmware screen](docs/card.png)
 
@@ -80,7 +81,8 @@ the real-device installation and exit tests, which remain pending.
 Firmware and new code: GPL-3.0-only. See [LICENSE](LICENSE),
 [LICENSING.md](LICENSING.md), [LICENSES](LICENSES) and
 [the original Tonitor README](README-TONITOR.md).
-Tonitor builds on Felucca and SLOOP; their update/boot path and credits remain.
+Based on [Tonitor](https://github.com/nzimas/tonitor) by Nuno Zimas,
+which builds on Felucca and SLOOP. Their credits and licenses are retained.
 Additional third-party components retain their licenses, including Plaits,
 Rings, msfa and the bundled fonts. The new visual drawings are original,
 inspired by JIANT's organisms and OP-1/OP-XY's instrument graphics.

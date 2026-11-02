@@ -111,5 +111,5 @@
     "tests/host/acid_clock_test.c": "bc3cec4761cbb036a5bbcae6a88d3a2dcb6b48f9b676d942475540fa86fe8630",
     "browser/bridge.c": "6cbe2c21cf13bb71f0b8fbe7cba8bee9482d71481765b95e878395a305332ae2"
   },
-  "source_archive_sha256": "56072eecaec0e965d98dec63c622e62c1cad1d427feb46a3d18cdf746c11566d"
+  "source_archive_sha256": "3b24bb3d82b773e97abdf3dae0e84bef60d84fc1b623c192ad12e52aa5e53e0b"
 }
