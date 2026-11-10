@@ -12,7 +12,20 @@ or try the complete instrument in your browser.
 
 ![DROPLETS, actual RC7 firmware screen](docs/card.png)
 
-## Current release: 1.0 RC7 — Living instruments
+## Current prerelease: 1.0 RC8 — Effects / PRISM
+
+19 new modulation destinations, eight controls each for delay/reverb/grains,
+six reverb characters, five delay characters, dotted/triplet/hybrid repeats,
+and PRISM granular processing with pitch, reverse probability and freeze.
+Loop quantization retains individual gates across overlapping notes and adds
+a mixed straight/triplet grid. [Controls, limits and validation](docs/RC8.md).
+
+The public and local simulators run RC8. Session format 32772 reads RC7 sessions.
+Build with `sh tests/fx_clock.sh` inside the host container. The local package
+is `release/bocjuhn-1.0-rc8/bocjuhn-1.0-rc8.fwsc`.
+**RC8 hardware validation is pending.** [Download RC8](https://github.com/IanP06/bocjuhn/releases/tag/v1.0.0-rc8).
+
+## Previous release: 1.0 RC7 — Living instruments
 
 Engine-specific animated organisms, clean black screens, saturated engine
 colors across tracks and menus, and redesigned temporary dials. Sound engines,
@@ -61,20 +74,21 @@ The supplied Dockerfile provides the host tools:
 ```sh
 docker build -t bocjuhn-host -f tests/Dockerfile.host .
 docker run --rm -v "$PWD:/work" bocjuhn-host sh tools/prepare_target.sh
-docker run --rm -v "$PWD:/work" bocjuhn-host sh tests/living.sh
+docker run --rm -v "$PWD:/work" bocjuhn-host sh tests/fx_clock.sh
 ```
 
 The test/build script expects the 20260730.1 toolchain under build/deps/jieli;
 set JIELI_TOOLCHAIN in the script if using a different installation. The release
-builder is tools/build_living_release.py; output is build/rc7. Build metadata
-hashes the firmware and generated headers. Product FM-1_197100, version B107.
+builder is tools/build_fx_release.py; output is build/rc8. Build metadata
+hashes the firmware and generated headers. Product FM-1_197100, version B108.
 The .fwsc includes the existing update loader; no separate data flash is needed.
 
 ## Firmware Hub
 
-The card is in [fmhub.json](fmhub.json). The submission text is prepared in
-[docs/HUB-SUBMISSION.txt](docs/HUB-SUBMISSION.txt), **not sent**. Real-device operation is confirmed by the owner. The hardware test record
-distinguishes that confirmation from individually documented installation and exit checks.
+The existing [Firmware Hub card](https://thefirmwarehub.com/#bocjuhn) follows
+GitHub releases and [fmhub.json](fmhub.json). The Hub documents synchronization
+within three hours. [Update details](docs/HUB-SUBMISSION.txt).
+RC7 operation was confirmed by the owner; RC8 hardware validation remains pending.
 
 ## License and credits
 

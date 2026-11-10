@@ -1,7 +1,7 @@
 
 var createTonitor = (() => {
   var _scriptDir = import.meta.url;
-
+  
   return (
 function(createTonitor) {
   createTonitor = createTonitor || {};

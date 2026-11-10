@@ -18,15 +18,20 @@ enum { MS_SINE, MS_TRI, MS_SAWU, MS_SAWD, MS_SQR, MS_STEPS, MS_DRIFT, MS_N };
 enum { MM_FREE, MM_NOTE, MM_ONCE, MM_N };
 enum { MSRC_OFF, MSRC_L1, MSRC_L2, MSRC_VEL, MSRC_KEY, MSRC_RAND, MSRC_N };
 enum { MD_MAC1, MD_MAC2, MD_MAC3, MD_MAC4, MD_FLT, MD_GR, MD_CR, MD_DIST, MD_RV, MD_DL, MD_LVL, MD_PAN, MD_RATE1, MD_RATE2,
-       MD_N };
+       MD_RSIZE, MD_RDECAY, MD_RDAMP, MD_RMIX, MD_RPRE, MD_RDIFF, MD_RWIDTH,
+       MD_DTIME, MD_DFB, MD_DDAMP, MD_DMIX, MD_DWIDTH,
+       MD_GSIZE, MD_GDENS, MD_GSCAT, MD_GFB, MD_GPITCH, MD_GREV, MD_GMIX, MD_N };
 static const char *const MS_NAME[MS_N] = {"SINE", "TRI", "SAW UP", "SAW DN", "SQUARE", "STEPS", "DRIFT"};
 static const char *const MM_NAME[MM_N] = {"FREE", "NOTE", "ONCE"};
 static const char *const MSRC_NAME[MSRC_N] = {"OFF", "LFO 1", "LFO 2", "VELOCITY", "KEY", "RANDOM"};
 static const char *const MD_NAME[MD_N] = {"", "", "", "", "FILTER", "GRAINS", "CRUSH", "DRIVE", "REVERB", "DELAY", "LEVEL",
-                                          "PAN", "LFO 1 RATE", "LFO 2 RATE"};   /* (the macros: by the sound's names) */
+                                          "PAN", "LFO 1 RATE", "LFO 2 RATE",
+ "RV SIZE","RV DECAY","RV DAMP","RV MIX","RV PRE","RV DIFF","RV WIDTH",
+ "DL TIME","DL FEEDBACK","DL DAMP","DL MIX","DL WIDTH",
+ "GR SIZE","GR DENSITY","GR SCATTER","GR FEEDBACK","GR PITCH","GR REVERSE","GR MIX"};   /* (the macros: by the sound's names) */
 /* each destination's whole swing (amount 100), in its own units */
 static const int16_t MD_SPAN[MD_N] = {MAC_MAX, MAC_MAX, MAC_MAX, MAC_MAX, FLT_MAX, FLT_MAX, FLT_MAX, 100, 100, 100, 12, 20,
-                                      50, 50};
+                                      50, 50, 100,100,100,100,100,100,100, 100,100,100,100,100, 100,100,100,100,24,100,100};
 
 typedef struct { uint8_t shape, rate, mode, fade; } mlfo_t;
 typedef struct { uint8_t src, dst; int8_t amt; } mslot_t;
@@ -235,7 +240,7 @@ static void mod_draw(uint32_t l, uint32_t e, uint32_t kind, uint32_t seed, uint3
  * destination, by amounts that may go far: what HOME draws stays near the sound; this takes risks (seed: a new one) */
 static void mod_random(uint32_t l, uint32_t seed)
 {
-    static const uint8_t DW[MD_N] = {10, 10, 10, 10, 12, 6, 5, 6, 7, 7, 4, 8, 3, 3};   /* (the destinations' odds) */
+    static const uint8_t DW[MD_N] = {10,10,10,10,12,6,5,6,7,7,4,8,3,3, 4,4,4,4,4,4,4, 4,4,4,4,4, 4,4,4,4,4,4,4};   /* (the destinations' odds) */
     static const uint8_t SW[MSRC_N] = {0, 35, 30, 10, 10, 15};
     rnd_t r;
     mod_t m;

@@ -19,6 +19,8 @@
  *   DAMP   how fast the highs die in the tank
  *   MIX    the reverb's return to the mix: x 0 .. 4, x 1 in the middle */
 
+#include "fx_extended.h"
+
 #define RV_F 24275               /* 22050 / 29761, Q15: the plate runs at FS / 2 */
 #define RV_SMAX 5120             /* SIZE's largest scale, Q12 (1.25) */
 #define RV_EXC 12                /* the modulated allpasses' excursion, samples (at FS / 2) */
@@ -43,6 +45,9 @@ typedef struct {
 
 #define RV_MEM 21600u
 static int16_t rv_mem[RV_MEM] POOL;
+static int16_t rv_cloud[4096] POOL;
+static uint32_t rv_cw,rv_cp;
+
 static struct {
     rv_line pre, dif[4], tank[8];
     uint32_t tank_base[8];       /* each tank line's delay at SIZE 1.0, samples (22.05 kHz) */
@@ -60,6 +65,17 @@ static struct {
 /* rounded: a floor's bias, round the tank, settles into a DC that never dies */
 AINL int32_t rvm(int32_t a, int32_t b) { return (int32_t)(((int64_t)a * b + (1 << 14)) >> 15); }
 static inline int16_t rv_sat(int32_t x) { return (int16_t)clampi(x, -32768, 32767); }
+AINL int32_t rv_texture(int32_t x,int mode) {
+    rv_cloud[rv_cw]=rv_sat(x);
+    uint32_t p=rv_cp&2047u,q=(p+1024u)&2047u;
+    int32_t w=(int32_t)(p<1024?p:2048-p)*32;
+    uint32_t a,b;
+    if(mode==2) {a=(rv_cw+4096-2048+p)&4095;b=(rv_cw+4096-2048+q)&4095;}
+    else {a=(rv_cw+4096-1-2*p)&4095;b=(rv_cw+4096-1-2*q)&4095;}
+    int32_t y=rvm(rv_cloud[a],w)+rvm(rv_cloud[b],Q15-w);
+    rv_cw=(rv_cw+1)&4095;rv_cp+=mode==3?3:1;
+    return y;
+}
 AINL void rv_write(rv_line *l, int32_t x)
 {
     l->buf[l->w] = rv_sat(x);
@@ -88,7 +104,7 @@ AINL int32_t rv_allpass(rv_line *l, int32_t x, int32_t g, uint32_t d)
     return dl - rvm(g, w);
 }
 
-static void rv_param(int32_t size, int32_t decay, int32_t damp, int32_t mix)   /* each 0..100 (main loop) */
+static void rv_apply(int32_t size, int32_t decay, int32_t damp, int32_t mix)   /* each 0..100 (main loop) */
 {
     int32_t m = clampi(mix, 0, 100), e;
     uint32_t loop_q16;
@@ -103,11 +119,17 @@ static void rv_param(int32_t size, int32_t decay, int32_t damp, int32_t mix)   /
     rv.mix = m * m * 131072 / 10000;                                  /* x m^2 x 4 */
 }
 
+static void rv_param(int32_t a,int32_t b,int32_t c,int32_t d) {
+    fx_generation++;
+    rv_base[0]=a;rv_base[1]=b;rv_base[2]=c;rv_base[3]=d;rv_apply(a,b,c,d);
+}
+
 static void rv_init(void)
 {
     uint32_t k, at = 0;
     rv_line *l;
     memset(&rv, 0, sizeof rv);
+    memset(rv_cloud,0,sizeof rv_cloud);rv_cw=rv_cp=0;
 #define RV_ALLOC(ln, n) do { (ln)->buf = rv_mem + at; (ln)->len = (n); (ln)->w = 0; at += (n); } while (0)
     RV_ALLOC(&rv.pre, RV_PRE + 2u);
     for (k = 0; k < 4u; k++)
@@ -131,7 +153,7 @@ static void rv_init(void)
 static FAST void rv_block(const int32_t *in, int32_t *ol, int32_t *or_, uint32_t n)
 {
     uint32_t i, k, d[8], dl[7], dr[7];
-    int32_t dec = rv.decay, mix = rv.mix, s, kd;
+    int32_t dec = fx_rctl[0]==5?32600:rv.decay, mix = rv.mix, s, kd;
     /* (the one-poles at half the rate: a step of 1 - (1 - k)^2 loses per second what k did at FS) */
     kd = Q15 - rv.damp;
     kd = 2 * kd - (int32_t)(((int64_t)kd * kd) >> 15);
@@ -158,17 +180,22 @@ static FAST void rv_block(const int32_t *in, int32_t *ol, int32_t *or_, uint32_t
         /* the slow sweep: two sines a quarter apart, ~0.5 Hz and a little faster for the other side */
         rv.lfo += 97400u;                        /* 0.50 Hz (at FS / 2) */
         rv.lfo2 += 123800u;                      /* 0.64 Hz */
-        ml = sin_ph(rv.lfo);
-        mr = sin_ph(rv.lfo2 + 0x40000000u);
+        ml = fx_rctl[0]==1?0:sin_ph(rv.lfo);
+        mr = fx_rctl[0]==1?0:sin_ph(rv.lfo2 + 0x40000000u);
         e1 = (uint32_t)((ml + Q15) * RV_EXC);    /* 0 .. 2 EXC, Q15 */
         e2 = (uint32_t)((mr + Q15) * RV_EXC);
         /* the input: the predelay, the bandwidth filter, the four diffusers */
         rv_write(&rv.pre, (in[i] + in[i + 1u]) >> 2);   /* (the pair averaged, and halved as before) */
-        x = rv_tap(&rv.pre, RV_PRE - 1u);
+        x = rv_tap(&rv.pre, (RV_PRE - 1u)*(uint32_t)fx_rctl[1]/100u);
+        if(fx_rctl[0]>=2 && fx_rctl[0]<=4) {
+            int32_t cloud=rv_texture(fx_rctl[0]==2?clampi(x+(rv.fb_l+rv.fb_r)/8,-32768,32767):x,fx_rctl[0]);
+            x=fx_rctl[0]==2?(x+cloud)/2:cloud;
+        }
+        if(fx_rctl[0]==5)x/=8;
         rv.bw += rvm(x - rv.bw, 29818);       /* 0.7 at FS: 0.91 at FS / 2 */
         x = rv.bw;
         for (k = 0; k < 4u; k++)
-            x = rv_allpass(&rv.dif[k], x, RV_DIFG[k], rv.dif[k].len - 2u);
+            x = rv_allpass(&rv.dif[k], x, RV_DIFG[k]*fx_rctl[2]/100, rv.dif[k].len - 2u);
         /* the left branch: in with the right branch's output */
         a = x + rvm(rv.fb_r, dec);
         {
@@ -208,6 +235,9 @@ static FAST void rv_block(const int32_t *in, int32_t *ol, int32_t *or_, uint32_t
             yl += RV_TAP_SIGN[k] > 0 ? tl : -tl;
             yr += RV_TAP_SIGN[k] > 0 ? tr : -tr;
         }
+        int32_t mid=(yl+yr)/2;
+        yl=mid+rvm(yl-mid,fx_rctl[3]*Q15/100);
+        yr=mid+rvm(yr-mid,fx_rctl[3]*Q15/100);
         yl = rvm(yl, mix);
         yr = rvm(yr, mix);
         ol[i] += (rv.pl + yl) >> 1;              /* (drawn back up: halfway, then there) */

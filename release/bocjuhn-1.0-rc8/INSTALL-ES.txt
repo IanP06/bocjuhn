@@ -1,0 +1,48 @@
+bocjuhn 1.0 RC8 — EFFECTS / PRISM
+Build B108 — FM-1_197100 — 2026-11-10
+
+RC8 compilado y verificado en software; validación física pendiente.
+RC7 fue confirmado funcionando por el propietario. No se instaló RC8 en un FM1.
+
+SIMULADOR
+Desde la carpeta del proyecto: node serve.cjs
+Abrir http://127.0.0.1:8766/ y recargar la página para recibir RC8.
+Desde el repositorio tonitor: node tools/serve_bocjuhn.cjs (puerto 8767).
+
+CONTROLES
+SEQ: DELAY 1/2 -> DELAY 2/2 -> REVERB 1/2 -> REVERB 2/2 -> MOD -> PLAY ALONG
+-> CLOCK -> ACID (si corresponde). Cuatro filas, cuatro knobs por página.
+SHIFT + K2: GRAINS. SEQ alterna GRAINS 1/2 y PRISM 2/2.
+Subir PRISM MIX para activar el modo nuevo. SHIFT + K2 sale.
+En CLOCK/LOOPS, MIX 16+T permite semicorcheas rectas y tresillos juntos.
+Las duraciones no se cuantizan; FIT y BPM siguen escalando el tiempo de la frase.
+RELEASE-NOTES.md contiene todos los rangos, destinos y límites.
+
+DEMO DE AUDIO
+prism-demo.wav: 0–4 s fuente seca; 4–8 s PRISM; 8–12 s freeze + shimmer;
+12–16 s PRISM + delay ping pong híbrido. Renderizado con el DSP C real, sin FM1.
+
+GUARDADO
+Formato 32772, lectura de sesiones RC7 con defaults compatibles.
+Se guardan efectos y PRISM en sesiones y snapshots; PRISM se copia por pista.
+Exportar un backup anterior para volver a RC7. El backup del navegador no
+respalda el FM1 físico. No cargar una sesión RC8 esperando compatibilidad RC7.
+
+INSTALACIÓN
+Abrir http://127.0.0.1:8766/install en Chrome o Edge. Conectar USB de datos
+directo y mantener alimentación estable. Cerrar otras herramientas MIDI.
+El instalador verifica identidad, tamaño y SHA-256; leer la identidad no escribe.
+La instalación sólo empieza al pulsar Install RC8 y aceptar su confirmación.
+No desconectar USB ni alimentación durante la escritura.
+
+RECUPERACIÓN
+Se conserva el loader de TONITOR/Felucca. Si una carga falla, mantener OCT−
+al encender abre RESCUE; cargar un paquete conocido mediante el instalador.
+Incluidos bocjuhn-1.0-rc7-rollback.fwsc y tonitor-original-build68.fwsc.
+Conservar los backups de memoria previos. No formatear el disco UBOOT.
+
+PRUEBA FÍSICA PENDIENTE
+Escuchar todas las variantes, mover parámetros con audio sostenido, probar
+freeze y desafinar granos, combinar seis pistas con efectos, comprobar carga,
+guardar/reabrir sesiones y repetir una frase mixta sin recortes de gate.
+El simulador verifica comportamiento, no tiempos de CPU ni latencia del FM1.

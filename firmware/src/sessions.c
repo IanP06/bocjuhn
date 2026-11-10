@@ -25,16 +25,17 @@ static int16_t clip_acid[4];
 #define SES_SECT 4096u
 #define SES_NSECT ((SES_HI - SES_LO) / SES_SECT)
 #define SES_MAGIC 0x32544e49u    /* "INT2": replaced engines have a separate session/preset namespace */
-#define SES_FORMAT 32771u           /* 27: the 16 snapshots (snaps.c), the loops they hold, the morph time, PLAY ALONG, at the end; each loop's start; 26: each sound kept as its seed keeps its family too (above its path, as OBRADOR's in 25); 25: OBRADOR (an eighth sound, after HIVE in each track's; eight engines' macros and envelopes); 24: each track's modulation (two LFOs, four slots: mod.c), at the end; 23: whether each track's BALLSY and BRICKLAYER play (PLAY), at the end; 22: HIVE's sound as reworked (twelve kinds; its design larger); 21: HIVE (a seventh sound; seven engines' macros and envelopes); 20: each track's BRICKLAYER (on, its notes, length, rate, harmony, instability), at the end; 19: BAYAREA (a sixth sound; six engines' macros and envelopes); 18: each track's balls (on, how many, speed, octaves, instability), at the end; 17: DRUID (a fifth sound, five engines' macros and envelopes); 16: each track's distortion, at the end; 15: each track's own envelope on each engine, at the end; 14: each track's chord mode and form, and the chords latched, at the end; 13: the delay's parameters and each track's send to it, at the end; 12: each looper's direction and speed (in loop_state); 11: each track's own transposition; 10: the loops' transposition (and each loop's own at its recording); 9: RUSSOLO (a fourth sound, four engines' macros); 8: the granulator's character,
+#define SES_FORMAT 32772u           /* 27: the 16 snapshots (snaps.c), the loops they hold, the morph time, PLAY ALONG, at the end; each loop's start; 26: each sound kept as its seed keeps its family too (above its path, as OBRADOR's in 25); 25: OBRADOR (an eighth sound, after HIVE in each track's; eight engines' macros and envelopes); 24: each track's modulation (two LFOs, four slots: mod.c), at the end; 23: whether each track's BALLSY and BRICKLAYER play (PLAY), at the end; 22: HIVE's sound as reworked (twelve kinds; its design larger); 21: HIVE (a seventh sound; seven engines' macros and envelopes); 20: each track's BRICKLAYER (on, its notes, length, rate, harmony, instability), at the end; 19: BAYAREA (a sixth sound; six engines' macros and envelopes); 18: each track's balls (on, how many, speed, octaves, instability), at the end; 17: DRUID (a fifth sound, five engines' macros and envelopes); 16: each track's distortion, at the end; 15: each track's own envelope on each engine, at the end; 14: each track's chord mode and form, and the chords latched, at the end; 13: the delay's parameters and each track's send to it, at the end; 12: each looper's direction and speed (in loop_state); 11: each track's own transposition; 10: the loops' transposition (and each loop's own at its recording); 9: RUSSOLO (a fourth sound, four engines' macros); 8: the granulator's character,
                                   * the latched notes; 7: the loops held out; 6: the macros; 5: the generations; 4: the paths; 3: a CALIGULA design a layer; 2: up to ten loops
                                   * a layer (1: one) */
+static int8_t clip_grain_fx[4];
 #define SES_MAX 73u              /* records in the list (one a sector at most) */
 #define SES_SLOTS 64u            /* the slots: sessions 1 .. 64 */
 /* the largest session: the head, the globals, six layers with their sounds and full loopers (~54 KiB) */
 #define SES_BUF (32u + 8u + NLAYER * (16u + NENG * NMAC + 2u + 36u + sizeof(fm_patch_t) + sizeof(an_design_t) + sizeof(cal_design_t) + \
                                       sizeof(rus_design_t) + sizeof(dr_design_t) + sizeof(ba_design_t) + sizeof(hv_design_t) + \
                                       sizeof(ob_design_t) + \
-                                      8u * LOOP_TRK + 4u * LOOP_N) + 4u + NLAYER + NLAYER * (2u + NKEY) + 8u + NSNAP * sizeof(snap_t) + sizeof(snap_speed) + sizeof(gr_edit) + sizeof(snap_gr) + sizeof(flt_edit) + sizeof(snap_filter) + sizeof(clock_config) + sizeof(acid_edit) + sizeof(snap_clock) + sizeof(snap_acid) + sizeof(snap_art) + sizeof(bl_accent) + sizeof(bl_slide) + 2u * NLAYER * (LOOP_TRK + 1u))
+                                      8u * LOOP_TRK + 4u * LOOP_N) + 4u + NLAYER + NLAYER * (2u + NKEY) + 8u + NSNAP * sizeof(snap_t) + sizeof(snap_speed) + sizeof(gr_edit) + sizeof(snap_gr) + sizeof(flt_edit) + sizeof(snap_filter) + sizeof(clock_config) + sizeof(acid_edit) + sizeof(fx) + sizeof(snap_fx) + sizeof(snap_clock) + sizeof(snap_acid) + sizeof(snap_art) + sizeof(bl_accent) + sizeof(bl_slide) + 2u * NLAYER * (LOOP_TRK + 1u))
 
 /* the flash, for the target (main.c) or the host test (host.c); offsets from the flash's start */
 static int ses_flash_read(uint32_t off, void *p, uint32_t n);
@@ -513,6 +514,8 @@ static void ses_emit(void)
     ses_out(acid_edit,sizeof acid_edit);
     ses_out(bl_accent,sizeof bl_accent);ses_out(bl_slide,sizeof bl_slide);
     for(uint32_t i=0;i<NSNAP;i++)if(snap.used&(1u<<i)){ses_out(&snap_clock[i],sizeof(clock_config));ses_out(snap_acid[i],sizeof acid_edit);ses_out(snap_art[i],sizeof snap_art[i]);}
+    ses_out(&fx,sizeof fx);
+    for(uint32_t j=0;j<NSNAP;j++)if(snap.used&(1u<<j))ses_out(&snap_fx[j],sizeof fx);
 }
 static void ses_head_fill(ses_head_t *h, uint32_t num, uint32_t format, uint32_t len, uint16_t crc)
 {
@@ -861,6 +864,7 @@ static void ses_events_drain(void);
 static void ses_fresh(uint32_t num)
 {
     uint32_t l, k;
+    fx_defaults();
     for (l = 0; l < NLAYER; l++) {
         ui.latch[l] = 0;
         ev_post(EV_STOP, l, 0, 0);
@@ -1027,6 +1031,7 @@ static void clip_copy(uint32_t l)
     clip.rate = loop[l].rate;
     clip.speed_pct = loop[l].speed_pct;
     memcpy(clip.grain_edit, gr_edit[l], 4);
+    memcpy(clip_grain_fx,fx.grain[l],4);
     memcpy(clip.filter_edit,flt_edit[l],2);
     memcpy(clip_take_bars,clk.take_bars[l],sizeof clip_take_bars);
     memcpy(clip_art[0],bl_accent[l],BL_MAX);memcpy(clip_art[1],bl_slide[l],BL_MAX);
@@ -1111,6 +1116,7 @@ static void clip_paste(uint32_t l)
     memcpy(ui.env_on[l], clip.env_on, sizeof clip.env_on);
     gran_profile(l, clip.gseed);
     memcpy(gr_edit[l], clip.grain_edit, 4);
+    memcpy(fx.grain[l],clip_grain_fx,4);
     memcpy(flt_edit[l],clip.filter_edit,2);
     memcpy(clk.take_bars[l],clip_take_bars,sizeof clip_take_bars);
     memcpy(bl_accent[l],clip_art[0],BL_MAX);memcpy(bl_slide[l],clip_art[1],BL_MAX);
@@ -1718,8 +1724,14 @@ static int ses_load(uint32_t i)
             acid_edit[l][2]=(int16_t)clampi(acid_edit[l][2],0,500);
             acid_edit[l][3]=(int16_t)clampi(acid_edit[l][3],0,100);
             clk.bars[l]=(uint8_t)clampi(clk.bars[l],1,64);
-            for(uint32_t t=0;t<3;t++) {clk.mode[l][t]=!!clk.mode[l][t];clk.div[l][t]=(uint8_t)clampi(clk.div[l][t],0,t?5:6);clock_cancel[l][t]++;}
+            for(uint32_t t=0;t<3;t++) {clk.mode[l][t]=!!clk.mode[l][t];clk.div[l][t]=(uint8_t)clampi(clk.div[l][t],0,t?5:10);clock_cancel[l][t]++;}
         }
+    }
+    fx_defaults();
+    for(uint32_t j=0;j<NSNAP;j++)snap_fx[j]=fx;
+    if(h.format>=32772u) {
+        ses_in(&fx,sizeof fx);fx_sanitize(&fx);
+        for(uint32_t j=0;j<NSNAP;j++)if(snap.used&(1u<<j)){ses_in(&snap_fx[j],sizeof fx);fx_sanitize(&snap_fx[j]);}
     }
     ses.current = ses.num[i];
     return SES_OK;

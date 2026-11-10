@@ -1,8 +1,10 @@
 {
-  "what": "An experimental instrument with six tracks and eight sound engines. Play acid lines, trembling particles, fractured textures and percussion. Layer free loops or clocked sequences, shape them with grains and effects, and watch each engine come alive.",
+  "what": "Six tracks and eight engines for free loops and clocked phrases. RC8 adds 33 modulation destinations, six reverb characters, five delays, dotted/triplet/hybrid echoes and PRISM granular pitch, reverse and freeze. Mixed-grid quantization preserves note gates. RC8 hardware validation pending.",
   "author": "ryuji kanagawa",
-  "kinds": ["synth"],
+  "kinds": [
+    "synth"
+  ],
   "image": "docs/card.png",
   "play": "https://ianp06.github.io/bocjuhn/",
-  "cheat": "https://github.com/IanP06/bocjuhn/blob/codex/living-rc6/ACID-CLOCK-RC5.txt"
+  "cheat": "https://github.com/IanP06/bocjuhn/blob/codex/living-rc6/docs/RC8.md"
 }

@@ -11,6 +11,8 @@ static struct {
     uint32_t w;                         /* where the next sample is written */
     int32_t t;                          /* the delay now, Q8 samples at FS / 2 (it glides to dl_t_want) */
     int32_t lp;                         /* the damping's state */
+    int32_t prev_r;
+    uint32_t phase;
     int32_t prev;                       /* the last echo, for the line drawn to the next */
 } dl;
 static volatile int32_t dl_t_want = 400 * 22 * 256, dl_fb, dl_damp = Q15, dl_mix;
@@ -24,13 +26,18 @@ AINL void dl_put(uint32_t i, int32_t x)
 /* TIME as ms: 20 x 100^(v / 100) */
 static int32_t dl_ms(int32_t v) { return (int32_t)((20u * exp2_q16(clampi(v, 0, 100) * 4354 + (clampi(v, 0, 100) * 12) / 100)) >> 16); }
 
-static void dl_param(int32_t time, int32_t fb, int32_t damp, int32_t mix)   /* each 0..100 (main loop) */
+static void dl_apply(int32_t time, int32_t fb, int32_t damp, int32_t mix)   /* each 0..100 (main loop) */
 {
     int32_t ms = dl_ms(time);
     dl_t_want = clampi(ms * 22 * 256 + ms * 13, 2 * 256, (int32_t)(DL_N - 4u) * 256);   /* x 22.05 */
     dl_fb = clampi(fb, 0, 100) * (LV(0.95) / 100);
     dl_damp = Q15 - clampi(damp, 0, 100) * (LV(0.88) / 100);   /* (the low-pass's coefficient: 1 none .. 0.12) */
     dl_mix = clampi(mix, 0, 100) * (Q15 / 100);
+}
+
+static void dl_param(int32_t a,int32_t b,int32_t c,int32_t d) {
+    fx_generation++;
+    dl_base[0]=a;dl_base[1]=b;dl_base[2]=c;dl_base[3]=d;dl_apply(a,b,c,d);
 }
 
 static void dl_init(void)
@@ -46,14 +53,29 @@ static FAST void dl_block(const int32_t *in, int32_t *l, int32_t *r, int32_t *rv
     uint32_t i;
     int32_t fb = dl_fb, damp = dl_damp, mix = dl_mix, tw = dl_t_want;
     for (i = 0; i + 1u < CTL; i += 2u) {
-        int32_t x = (in[i] + in[i + 1u]) >> 1, y, o0, wv;
+        int32_t x = (in[i] + in[i + 1u]) >> 1, y, o0, wv, right;
         uint32_t p, i0, f;
-        dl.t += (tw - dl.t) >> 11;                       /* (the glide) */
+        dl.t += (tw - dl.t) >> (fx_d[0]==1?5:11);                       /* (the glide) */
         p = (dl.w << 8) + (DL_N << 8) - (uint32_t)dl.t;
         i0 = (p >> 8) % DL_N;
         f = p & 255u;
         y = dl_get(i0);
         y += ((dl_get(i0 + 1u >= DL_N ? 0u : i0 + 1u) - y) * (int32_t)f) >> 8;
+        uint32_t span=(uint32_t)(dl.t>>8);
+        if(span<8)span=8;
+        right=dl_get((dl.w+DL_N-span/2)%DL_N);
+        if(fx_d[2]==3)right=dl_get((dl.w+DL_N-span*4/9)%DL_N);
+        if(fx_d[0]==3) {
+            /* Two overlapping reverse windows; triangular crossfade. */
+            uint32_t a=dl.phase%span,b=(a+span/2)%span;
+            int32_t wa=(int32_t)(a<span/2?a:span-a)*Q15/(int32_t)(span/2);
+            y=mulq15(dl_get((dl.w+DL_N-(2*a)%DL_N-1)%DL_N),wa)
+             +mulq15(dl_get((dl.w+DL_N-(2*b)%DL_N-1)%DL_N),Q15-wa);
+            right=y;
+        } else if(fx_d[0]==4) {
+            y=(y+dl_get((dl.w+DL_N-span*3/4)%DL_N))/2;
+        }
+        dl.phase++;
         dl.lp += mulq15(y - dl.lp, damp);
         wv = clampi(x + mulq15(dl.lp, fb), -32767, 32767);
         dl_put(dl.w, wv);
@@ -63,9 +85,14 @@ static FAST void dl_block(const int32_t *in, int32_t *l, int32_t *r, int32_t *rv
         o0 = (dl.prev + y) >> 1;                         /* drawn out to the full rate: half-way, then the echo */
         dl.prev = y;
         l[i] += o0;
-        r[i] += o0;
+        if(fx_d[0]==2 || fx_d[0]==4 || fx_d[2]==3) {
+            right=mulq15(right,mix);
+            right=y+mulq15(right-y,fx_d[3]*Q15/100);
+        } else right=y;
+        r[i] += (dl.prev_r+right)>>1;
+        dl.prev_r=right;
         l[i + 1u] += y;
-        r[i + 1u] += y;
+        r[i + 1u] += right;
         rvin[i] += o0 >> 1;
         rvin[i + 1u] += y >> 1;
     }

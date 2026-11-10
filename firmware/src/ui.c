@@ -889,6 +889,7 @@ static void ui_input(void)
         ui.force = 1;
     } else if (btn_bit(press, B_SEQ)) {          /* SEQ, again and again: DELAY, REVERB, MOD, PLAY ALONG, back to
                                                   * playing */
+        if(ui.gr_page) {ui.gr_page=ui.gr_page==1?2:1;ui.force=1;return;}
         if(ui.acid_page) ui.acid_page=0;
         else if (ui.clock_page) {ui.clock_page=0;ui.acid_page=ui.engine[ui.sel]==ENG_ANIMA;}
         else if (ui.rx_page) { ui.rx_page=0; ui.clock_page=1; }
@@ -896,8 +897,8 @@ static void ui_input(void)
             ui.mod_page = 0;
             ui.rx_page = 1;
             rx_defaults();
-        } else if (ui.rv_page && ui.fx)
-            ui.fx = 0;
+        } else if (ui.rv_page==1) ui.rv_page=2;
+        else if (ui.rv_page && ui.fx) {ui.fx=0;ui.rv_page=1;}
         else if (ui.rv_page) {
             ui.rv_page = 0;
             ui.mod_page = 1;
@@ -987,13 +988,13 @@ static void ui_input(void)
         }
     }
     sh = (int)((fm1_in.notes >> KEY_SHIFT) & 1u);  /* (SHIFT read once: the knobs below all see the same) */
-    if (sh && !(ui.bl_page && ui.engine[ui.sel]==ENG_ANIMA) && !ui.acid_page && !ui.clock_page && !ui.filter_page && !ui.gr_page && !ui.snap_page && (s = enc_take(EN_K4)) != 0) {   /* SHIFT + KNOB 4: the track's delay send */
+    if (sh && !(ui.bl_page && ui.engine[ui.sel]==ENG_ANIMA) && !ui.acid_page && !ui.clock_page && !ui.rv_page && !ui.filter_page && !ui.gr_page && !ui.snap_page && (s = enc_take(EN_K4)) != 0) {   /* SHIFT + KNOB 4: the track's delay send */
         ui.dsend[ui.sel] = (int8_t)clampi(ui.dsend[ui.sel] + 2 * s, 0, 100);
         level_pan_apply(ui.sel);
         ui.dial = DIAL_DSEND;
         ui.dial_until = fm1_ms + 1000u;
     }
-    if (sh && !(ui.bl_page && ui.engine[ui.sel]==ENG_ANIMA) && !ui.acid_page && !ui.clock_page && !ui.filter_page && !ui.gr_page && !ui.snap_page && (s = enc_take(EN_K3)) != 0) {   /* SHIFT + KNOB 3: the track's distortion */
+    if (sh && !(ui.bl_page && ui.engine[ui.sel]==ENG_ANIMA) && !ui.acid_page && !ui.clock_page && !ui.rv_page && !ui.filter_page && !ui.gr_page && !ui.snap_page && (s = enc_take(EN_K3)) != 0) {   /* SHIFT + KNOB 3: the track's distortion */
         ui.dist[ui.sel] = (int8_t)clampi(ui.dist[ui.sel] + 2 * s, 0, 100);
         level_pan_apply(ui.sel);
         ui.dial = DIAL_DIST;
@@ -1017,8 +1018,8 @@ static void ui_input(void)
         }
         if((s=enc_take(EN_K4))) {
             if(sh && t==CK_LOOP) {clk.bars[l]=(uint8_t)clampi((int)clk.bars[l]+s,1,64);memset(clk.take_bars[l],0,sizeof clk.take_bars[l]);}
-            else clk.div[l][t]=(uint8_t)clampi((int)clk.div[l][t]+s,0,t==CK_LOOP?6:5);
-            clock_cancel[l][t]++; ui.force=1;
+            else clk.div[l][t]=(uint8_t)clampi((int)clk.div[l][t]+s,0,t==CK_LOOP?10:5);
+            if(t!=CK_LOOP || sh)clock_cancel[l][t]++; ui.force=1;
         }
     } else if (ui.filter_page) {
         if ((s=enc_take(EN_K1))) {
@@ -1034,7 +1035,11 @@ static void ui_input(void)
         for (uint32_t j = 0; j < 4u; j++) {
             s = enc_take(K[j]);
             if (s && sh && j == 1u) { ui.gr_page = 0; ui.force = 1; break; }
-            if (s) { gr_edit[ui.sel][j] = (int8_t)clampi(gr_edit[ui.sel][j] + s, -100, 100); ui.force = 1; }
+            if (s) {
+                if(ui.gr_page==1)gr_edit[ui.sel][j]=(int8_t)clampi(gr_edit[ui.sel][j]+s,-100,100);
+                else fx.grain[ui.sel][j]=(int8_t)clampi(fx.grain[ui.sel][j]+s,j?0:-24,j==0?24:j==2?1:100);
+                ui.force=1;
+            }
         }
     } else if (ui.speed_page) {
         uint32_t l = ui.sel;
@@ -1112,11 +1117,12 @@ static void ui_input(void)
     } else if (ui.rv_page) {                     /* KNOB 1..4: the reverb, or the delay */
         static const uint8_t K[4] = {EN_K1, EN_K2, EN_K3, EN_K4};
         uint32_t j;
-        int8_t *pv = ui.fx ? ui.dlp : ui.rvp;
+        int8_t *pv = ui.rv_page==2?(ui.fx?fx.dl:fx.rv):(ui.fx?ui.dlp:ui.rvp);
         for (j = 0; j < 4u; j++) {
             s = knob_take(K[j], sh);
             if (s) {
-                pv[j] = (int8_t)clampi(pv[j] + 2 * s, 0, 100);
+                int hi=ui.rv_page==2?(ui.fx?(j==0?4:j==1?5:j==2?3:100):(j?100:5)):100;
+                pv[j]=(int8_t)clampi(pv[j]+(hi<100?1:2)*s,0,hi);
                 if (ui.fx)
                     dl_param(ui.dlp[0], ui.dlp[1], ui.dlp[2], ui.dlp[3]);
                 else
@@ -2077,20 +2083,25 @@ static void draw_rx_page(void)
 static void draw_rv_title(void)
 {
     cv_begin(240, 52, C_BLACK);
-    cv_text_c(3, &FONT_L, ui.fx ? "DELAY" : "REVERB", ui.fx ? C_DELAY : C_SEND);
+    cv_text_c(3, &FONT_L, ui.fx ? (ui.rv_page==2?"DELAY 2/2":"DELAY 1/2") : (ui.rv_page==2?"REVERB 2/2":"REVERB 1/2"), ui.fx ? C_DELAY : C_SEND);
     cv_blit(0, 0);
 }
 static void draw_rv_row(uint32_t j, int touched)
 {
-    char v[12];
-    const int8_t *pv = ui.fx ? ui.dlp : ui.rvp;
+    char v[20];
+    const int8_t *pv = ui.rv_page==2?(ui.fx?fx.dl:fx.rv):(ui.fx?ui.dlp:ui.rvp);
     uint16_t bg = touched ? ui_color(ui.sel) : C_BLACK, fg = touched ? C_BLACK : C_WHITE;
     cv_begin(240, 47, bg);
     {
-        const char *name = ui.fx ? DL_NAME[j] : RV_NAME[j];
+        static const char *const rn[4]={"TYPE","PREDELAY","DIFFUSION","WIDTH"};
+        static const char *const dn[4]={"TYPE","DIVISION","RHYTHM","WIDTH"};
+        const char *name = ui.rv_page==2?(ui.fx?dn[j]:rn[j]):(ui.fx ? DL_NAME[j] : RV_NAME[j]);
         const font_t *f = &FONT_S;               /* (one size for every row of both pages: REPEATS 100 fits it) */
         int32_t y = (37 - (int32_t)FONT_S.h) / 2;
-        if (ui.fx && j == 0u) {                  /* the delay's TIME in seconds, no unit (the font has no
+        if(ui.rv_page==2 && j==0)str_cpy(v,ui.fx?FX_DTYPE[pv[j]]:FX_RTYPE[pv[j]],sizeof v);
+        else if(ui.rv_page==2 && ui.fx && j==1)str_cpy(v,FX_DIV[pv[j]],sizeof v);
+        else if(ui.rv_page==2 && ui.fx && j==2)str_cpy(v,FX_RHYTHM[pv[j]],sizeof v);
+        else if (ui.rv_page==1 && ui.fx && j == 0u) {                  /* the delay's TIME in seconds, no unit (the font has no
                                                   * lower case): 0.02 .. 0.99, 1.0 .. 2.0 */
             int32_t cs = (dl_ms(pv[0]) + 5) / 10, n;
             if (cs >= 100) {
@@ -2130,7 +2141,7 @@ static void draw_rv_page(void)
         return;
     }
     for (j = 0; j < 4u; j++)
-        if (ui.shown_rvp[j] != (ui.fx ? ui.dlp : ui.rvp)[j] || (((int32_t)j == t) != ((int32_t)j == ui.shown_touch)))
+        if (ui.shown_rvp[j] != (ui.rv_page==2?(ui.fx?fx.dl:fx.rv):(ui.fx?ui.dlp:ui.rvp))[j] || (((int32_t)j == t) != ((int32_t)j == ui.shown_touch)))
             draw_rv_row(j, (int32_t)j == t);
     ui.shown_touch = (int8_t)t;
 }
@@ -2776,20 +2787,23 @@ static void ui_draw(void)
     }
     if (ui.gr_page) {
         if (!ui.force && ui.shown_page == 17) return;
-        static const char *const label[4] = {"SIZE", "DENSITY", "SCATTER", "FEEDBACK"};
+        static const char *const label[8] = {"SIZE", "DENSITY", "SCATTER", "FEEDBACK","PITCH","REVERSE","FREEZE","PRISM MIX"};
         CV_AREA(0, 0, 240, 240, C_BLACK) {
             cv_rect(8, 8, 3, 20, ui_color(ui.sel));
-            cv_text_c(8, &FONT_M, "GRAINS", C_WHITE);
+            cv_text_c(8, &FONT_M, ui.gr_page==2?"PRISM 2/2":"GRAINS 1/2", C_WHITE);
             for (uint32_t j = 0; j < 4u; j++) {
-                int32_t y = 46 + 44 * (int32_t)j, v = gr_edit[ui.sel][j];
+                int32_t y = 46 + 44 * (int32_t)j, v = ui.gr_page==2?fx.grain[ui.sel][j]:gr_edit[ui.sel][j];
                 char n[8]; fmt_int(n, v);
-                cv_text(12, y + 5, &FONT_S, label[j], C_WHITE);
+                if(ui.gr_page==2 && j==2)str_cpy(n,v?"ON":"OFF",sizeof n);
+                cv_text(12, y + 5, &FONT_S, label[j+(ui.gr_page==2?4:0)], C_WHITE);
                 cv_text(228 - text_w(&FONT_M, n), y, &FONT_M, n, ui_color(ui.sel));
                 cv_rect(12, y + 29, 216, 1, C_GREY);
-                cv_rect(120, y + 26, 1, 7, C_WHITE);
-                cv_rect(12 + (v + 100) * 214 / 200, y + 26, 2, 7, ui_color(ui.sel));
+                int lo=ui.gr_page==1?-100:j==0?-24:0;
+                int hi=ui.gr_page==1?100:j==0?24:j==2?1:100;
+                cv_rect(12+(0-lo)*214/(hi-lo), y + 26, 1, 7, C_WHITE);
+                cv_rect(12+(v-lo)*214/(hi-lo), y + 26, 2, 7, ui_color(ui.sel));
             }
-            cv_text_c(224, &FONT_XS, "0 = ORIGINAL", C_GREY);
+            cv_text_c(224, &FONT_XS, "SEQ: PAGE 1/2", C_GREY);
         }
         ui.shown_page = 17; ui.force = 0;
         return;

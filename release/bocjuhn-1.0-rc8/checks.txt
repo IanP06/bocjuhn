@@ -1,0 +1,77 @@
+PRISM pitch -24 energy 475585683 frozen 0 mix 100
+PRISM pitch -12 energy 407787198 frozen 0 mix 100
+PRISM pitch 0 energy 248097008 frozen 0 mix 100
+PRISM pitch 12 energy 206675815 frozen 0 mix 100
+PRISM pitch 24 energy 482836972 frozen 0 mix 100
+FX/CLOCK PASS: owned overlapping gates, mixed grid, wrapped notes, UI, modulation, sessions, snapshots, 6 reverbs, 20 delay/rhythm combinations, PRISM pitch extremes/freeze
+ACID/CLOCK PASS: drift, mono priority, queue cancellation, non-destructive loop, UI, persistence
+interval: ok
+flows: ok
+latch: ok
+playalong: ok
+loopmodes: ok
+looptie: ok
+tracktransp: ok
+setup: SHIFT + PRESETS: PLUCK -> MALLET
+setup: ok
+backup: 3 records listed
+backup: ok
+presets: ok
+macros FM       1: moves 54 of 54 sounds, typically by 46.5 dB
+macros FM       2: moves 54 of 54 sounds, typically by 21.2 dB
+macros FM       3: moves 54 of 54 sounds, typically by 28.9 dB
+macros FM       4: moves 54 of 54 sounds, typically by 6.1 dB
+macros ANIMA    1: moves 44 of 44 sounds, typically by 58.0 dB
+macros ANIMA    2: moves 44 of 44 sounds, typically by 7.0 dB
+macros ANIMA    3: moves 44 of 44 sounds, typically by 13.2 dB
+macros ANIMA    4: moves 44 of 44 sounds, typically by 14.1 dB
+macros FRACT    1: moves 12 of 12 sounds, typically by 18.8 dB
+macros FRACT    2: moves 12 of 12 sounds, typically by 34.6 dB
+macros FRACT    3: moves 12 of 12 sounds, typically by 35.0 dB
+macros FRACT    4: moves 12 of 12 sounds, typically by 23.0 dB
+macros: ok
+overdubs: ok
+snaps: the morph in 38 steps of 50 ms, the pitch and loops at 19
+snaps: ok
+balls: one ball, speed 50, 10 s: 7 hits (bottom 2, left 2, top 2, right 1), peak -8.2 dB
+balls: instability 80: the way a ball covers in 100 ms, 0.021 .. 0.394 boxes
+balls: four balls, speed 70, instability 80, 30 s: bottom 44, left 51, top 47, right 51
+balls: ok
+bricks: 3 notes in 8 steps, rate 50 (353 ms a step), 4 s: 5 struck, 3 pitches
+bricks: harmony 100, 4 s: 10 struck, 5 pitches
+bricks: variation 100: notes a second from 0 to 5
+bricks: variation 100: levels 28 .. 110
+bricks: ok
+sessions: 64 saved before FULL
+sessions: the largest one, 8 sectors
+sessions: ok
+mod: LFO 1 at RATE 70 on the filter, +60: the offset swings -38 .. 38 (of +-64)
+mod: HOME on FM DRONE      : 165 of 200 with a modulation
+mod: HOME on FM IMPACT     :   9 of 200 with a modulation
+mod: HOME on HIVE PAD      : 135 of 200 with a modulation
+mod: HOME on HIVE STAB     :  23 of 200 with a modulation
+mod: HOME on BAYAREA DRONE : 169 of 200 with a modulation
+mod: HOME on DRUID DRONE   : 162 of 200 with a modulation
+mod: HOME on ANIMA         :   0 of 200 with a modulation
+mod: HOME on CALIGULA      :   0 of 200 with a modulation
+mod: SHIFT + SEQ, 300 throws: 33 destinations of 33 seen, 0 bad
+mod: ok
+WASM ACID/CLOCK: audio, page traversal, BPM, per-target config and track isolation PASS
+backup page: ok (4 records, 13504 bytes, out and back)
+loader: image 8112 B, ota.bin 6836 B
+image 343484 B of 581564; RAM .data+.bss 97204 B of 98304; pool 326880 B of 344064
+bocjuhn-1.0-rc8.fwsc 609992 bytes; version B108 SHA256 56e9cae59a05233ef48b930e719f643dfc26452aae420d46e46da4fc4f43ea62
+web installer: ok
+PRISM pitch -24 energy 475585683 frozen 0 mix 100
+PRISM pitch -12 energy 407787198 frozen 0 mix 100
+PRISM pitch 0 energy 248097008 frozen 0 mix 100
+PRISM pitch 12 energy 206675815 frozen 0 mix 100
+PRISM pitch 24 energy 482836972 frozen 0 mix 100
+FX/CLOCK PASS: owned overlapping gates, mixed grid, wrapped notes, UI, modulation, sessions, snapshots, 6 reverbs, 20 delay/rhythm combinations, PRISM pitch extremes/freeze
+PRISM demo: 705600 stereo frames, peak 13090
+WASM ACID/CLOCK: audio, page traversal, BPM, per-target config and track isolation PASS
+loader: image 8112 B, ota.bin 6836 B
+image 343484 B of 581564; RAM .data+.bss 97204 B of 98304; pool 326880 B of 344064
+bocjuhn-1.0-rc8.fwsc 609992 bytes; version B108 SHA256 56e9cae59a05233ef48b930e719f643dfc26452aae420d46e46da4fc4f43ea62
+web installer: ok
+WASM ACID/CLOCK: audio, page traversal, BPM, per-target config and track isolation PASS

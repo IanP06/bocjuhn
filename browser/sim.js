@@ -37,7 +37,7 @@ function showFrame(d) {
   if (powered) { g.putImageData(picture,0,0); zoom.putImageData(picture,0,0); }
   buttonNodes.forEach((el,i) => el.classList.toggle('page-active',powered && !!d.leds[ledIds[i]]));
   keyNodes.forEach((el,i) => el.classList.toggle('firing',powered && !!d.leds[14+i]));
-  const s=lastState, page=s[48]?'CLOCK':s[49]?'ACID SETTINGS':s[40]?'PRESETS':s[3]?'GRAINS':s[4]?'LOOP SPEED':s[5]?'BALLSY':s[6]?'BRICKLAYER':s[7]?'PLAY ALONG':s[2]?'EDIT':'MAIN';
+  const s=lastState, page=s[48]?'CLOCK':s[49]?'ACID SETTINGS':s[40]?'PRESETS':s[3]===2?'PRISM 2/2':s[3]?'GRAINS 1/2':s[20]?(s[21]?'DELAY ':'REVERB ')+s[20]+'/2':s[4]?'LOOP SPEED':s[5]?'BALLSY':s[6]?'BRICKLAYER':s[7]?'PLAY ALONG':s[2]?'EDIT':'MAIN';
   canvas.setAttribute('aria-label','Track '+(s[0]+1)+', '+engines[s[1]]+', '+page+', '+s[8]+' loops');
   $('device').dataset.page=page; $('device').dataset.track=s[0]+1;
   $('device').dataset.engine=engines[s[1]];
@@ -48,6 +48,8 @@ function showFrame(d) {
   if(s[48]) $('interactionHint').textContent='CLOCK · K1 BPM '+s[50]+' · K2 target · K3 FREE/SYNC · K4 division · LOOPS: SHIFT+K4 bars';
   else if(s[49]) $('interactionHint').textContent='ACID · K1 WAVE · K2 ACCENT · K3 SLIDE MS · K4 DRIVE';
   else if (s[40]) $('interactionHint').textContent='PRESETS · Turn PRESETS to choose · ARP or SAVE to load · Slots 1–24: editable factory sounds on RYUJI / FRACT';
+  else if(s[3]===2) $('interactionHint').textContent='PRISM 2/2 · K1 PITCH '+s[16]+' st · K2 REVERSE '+s[17]+'% · K3 FREEZE '+(s[18]?'ON':'OFF')+' · K4 MIX '+s[19]+'% · SEQ: page 1';
+  else if(s[20]) $('interactionHint').textContent=(s[21]?'DELAY':'REVERB')+' '+s[20]+'/2 · '+(s[20]===1?(s[21]?'K1 TIME · K2 REPEATS · K3 DAMP · K4 MIX':'K1 SIZE · K2 DECAY · K3 DAMP · K4 MIX'):(s[21]?'K1 TYPE · K2 DIVISION · K3 RHYTHM · K4 WIDTH':'K1 TYPE · K2 PREDELAY · K3 DIFFUSION · K4 WIDTH'));
   else if (s[3]) $('interactionHint').textContent='GRAINS · K1 SIZE '+s[16]+' · K2 DENSITY '+s[17]+' · K3 SCATTER '+s[18]+' · K4 FEEDBACK '+s[19];
   else if(s[4]) $('interactionHint').textContent='LOOP SPEED · Track '+s[9]+'% · Loop '+(s[11]+1)+' at '+s[10]+'% · K1 track / K2 loop / K3 speed';
   else $('interactionHint').textContent='Top six buttons: tracks · PRESETS: engine · HOME: new sound · Black key 10: EDIT · SHIFT + KNOB 2: GRAINS';
@@ -68,7 +70,7 @@ async function power() {
     context=new AudioContext({sampleRate:44100,latencyHint:'interactive'});
     await context.resume();
     await dbReady;
-    worker=new Worker(ROOT+'engine-worker.js',{type:'module'});
+    worker=new Worker(ROOT+'engine-worker.js?v=rc8',{type:'module'});
     await new Promise((resolve,reject)=>{
       worker.onerror=error=>{ status('Engine error — reload to retry'); console.error(error); reject(error); };
       worker.onmessage=({data:d})=>{
@@ -167,7 +169,7 @@ $('shiftLatch').onclick=()=>{if(!powered)return;shiftLocked=!shiftLocked;$('shif
 $('screenZoom').onclick=()=>{$('zoomPanel').hidden=!$('zoomPanel').hidden;$('screenZoom').setAttribute('aria-pressed',!$('zoomPanel').hidden);};
 $('helpToggle').onclick=()=>{$('panelHelp').hidden=!$('panelHelp').hidden;$('helpToggle').setAttribute('aria-expanded',!$('panelHelp').hidden);};
 const signature='TONITOR-INTERVAL-WEB-V2\n';
-$('export').onclick=async()=>{await dbReady;const flash=memory||new Uint8Array(0x100000).fill(255);const url=URL.createObjectURL(new Blob([signature,flash],{type:'application/octet-stream'}));const a=document.createElement('a');a.href=url;a.download='bocjuhn-rc7-memory.bin';a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);};
+$('export').onclick=async()=>{await dbReady;const flash=memory||new Uint8Array(0x100000).fill(255);const url=URL.createObjectURL(new Blob([signature,flash],{type:'application/octet-stream'}));const a=document.createElement('a');a.href=url;a.download='bocjuhn-rc8-memory.bin';a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);};
 $('import').onchange=async e=>{
   const file=e.target.files[0];if(!file)return;
   const bytes=new Uint8Array(await file.arrayBuffer()),header=new TextEncoder().encode(signature);

@@ -108,6 +108,7 @@ static void gran_profile(uint32_t l, uint32_t seed)
 static void gran_init(void)
 {
     uint32_t l, i;
+    fx_defaults();
     memset(gr_edit, 0, sizeof gr_edit);
     for (l = 0; l < NLAYER; l++) {
         memset(&gran[l], 0, sizeof gran[l]);
@@ -118,7 +119,7 @@ static void gran_init(void)
 }
 
 /* a grain, now: from the knob's v (-FLT .. ; a = |v| in Q15), into slot s */
-static void gran_spawn(gran_t *g, int32_t v, int32_t a, uint32_t len, int32_t scat, int32_t norm)
+static void gran_spawn(gran_t *g, uint32_t l, int32_t v, int32_t a, uint32_t len, int32_t scat, int32_t norm)
 {
     grain_t *gr = 0;
     uint32_t k, back, need, dmax;
@@ -131,7 +132,7 @@ static void gran_spawn(gran_t *g, int32_t v, int32_t a, uint32_t len, int32_t sc
         }
     if (!gr)
         return;
-    if (v > 0 && rnd_q15(&g->r) < mulq15(a, LV(0.01) * g->drop))
+    if (!fx_g[l][7] && v > 0 && rnd_q15(&g->r) < mulq15(a, LV(0.01) * g->drop))
         return;                                         /* dropped: a hole */
     /* the pitch: the profile's intervals, more of them the further it is turned */
     if (rnd_q15(&g->r) < a) {
@@ -140,9 +141,19 @@ static void gran_spawn(gran_t *g, int32_t v, int32_t a, uint32_t len, int32_t sc
         semis = 0;
     if (v > 0)
         cents = mulq15(rnd_bi(&g->r), mulq15(a, g->detune));   /* jitter */
+    if(fx_g[l][7]){semis=0;cents=0;}
+    semis += fx_g[l][4];
+    semis=clampi(semis,-24,24);
     r_q16 = (int32_t)exp2_q16((semis * 100 + cents) * 65536 / 1200);
     inc = r_q16 >> 1;                                  /* the buffer is at half the rate */
+    if(fx_g[l][7]) {
+        /* Fit a pitched/reversed grain inside the physical history. Long SIZE
+         * at +24 st must shorten the window, never silently reject all grains. */
+        uint32_t fit=(uint32_t)(((uint64_t)(GR_N-128u)<<16)/(uint32_t)(inc+Q16/2));
+        if(len>fit)len=fit;
+    }
     rev = rnd_q15(&g->r) < mulq15(a, LV(0.01) * g->rev);
+    if(fx_g[l][7])rev=rnd_below(&g->r,100)<fx_g[l][5];
     /* where it starts: far enough back that the read head never meets the write head */
     back = (uint32_t)(((uint64_t)len * (uint32_t)inc) >> 16);   /* buffer samples the grain reads */
     need = rev ? 4u : (r_q16 > Q16 ? (uint32_t)(((uint64_t)len * (uint32_t)(inc - Q16 / 2)) >> 16) + 8u : 8u);
@@ -154,14 +165,14 @@ static void gran_spawn(gran_t *g, int32_t v, int32_t a, uint32_t len, int32_t sc
     if (need + 16u > dmax)
         return;
     delay = (int32_t)need + mulq15(rnd_q15(&g->r), mulq15(scat, (int32_t)(dmax - need)));
-    if (g->stut_left && g->stut_pos >= 0) {             /* a stutter: the same start again */
+    if (!fx_g[l][7] && g->stut_left && g->stut_pos >= 0) {             /* a stutter: the same start again */
         start = g->stut_pos;
         g->stut_left--;
     } else {
         start = (int32_t)g->w - delay;
         if (start < 0)
             start += GR_N;
-        if (v > 0 && rnd_q15(&g->r) < mulq15(a, LV(0.01) * g->stut)) {
+        if (!fx_g[l][7] && v > 0 && rnd_q15(&g->r) < mulq15(a, LV(0.01) * g->stut)) {
             g->stut_pos = start;
             g->stut_left = (uint8_t)(1 + rnd_below(&g->r, 4));
         }
@@ -184,6 +195,8 @@ static void gran_spawn(gran_t *g, int32_t v, int32_t a, uint32_t len, int32_t sc
 static void gran_block(uint32_t l, int32_t *x, uint32_t n, int32_t v, int any)
 {
     gran_t *g = &gran[l];
+    for(unsigned k=0;k<4;k++)fx_g[l][k]=mod_val(l,MD_GSIZE+k,gr_edit[l][k],-100,100);
+    if(fx_g[l][7] && !v)v=-FLT_MAX/2;
     int32_t a = (v < 0 ? -v : v) * (Q15 / FLT_MAX), amt1 = a * 2 > Q15 ? Q15 : a * 2, da;
     int32_t len_ms, int_ms, jit, scat, fb = 0, lpk = 0, crush = 0, overlap, norm;   /* lpk: the darkening's Hz */
     svf_c dc;
@@ -220,12 +233,20 @@ static void gran_block(uint32_t l, int32_t *x, uint32_t n, int32_t v, int any)
     }
     if (g->frozen && (!g->freeze_left-- || v >= 0))
         g->frozen = 0;
-    if (gr_edit[l][0])
-        len_ms = clampi((int32_t)(((int64_t)len_ms * exp2_q16(gr_edit[l][0] * 1310)) >> 16), 2, 500);
-    if (gr_edit[l][1])
-        int_ms = clampi((int32_t)(((int64_t)int_ms * exp2_q16(-gr_edit[l][1] * 1310)) >> 16), 1, 1000);
-    if (gr_edit[l][2]) scat = clampi(scat + gr_edit[l][2] * (Q15 / 100), 0, Q15);
-    fb = clampi(fb + gr_edit[l][3] * (Q15 / 100), 0, Q15 * 3 / 4);
+    if (fx_g[l][0])
+        len_ms = clampi((int32_t)(((int64_t)len_ms * exp2_q16(fx_g[l][0] * 1310)) >> 16), 2, 500);
+    if (fx_g[l][1])
+        int_ms = clampi((int32_t)(((int64_t)int_ms * exp2_q16(-fx_g[l][1] * 1310)) >> 16), 1, 1000);
+    if (fx_g[l][2]) scat = clampi(scat + fx_g[l][2] * (Q15 / 100), 0, Q15);
+    fb = clampi(fb + fx_g[l][3] * (Q15 / 100), 0, Q15 * 3 / 4);
+    if(fx_g[l][7]) {
+        /* PRISM: independent size/density, without random pitch or dropout. */
+        len_ms=4+(fx_g[l][0]+100)*396/200;
+        int_ms=2+(100-fx_g[l][1])*248/200;
+        jit=0;scat=(fx_g[l][2]+100)*Q15/200;
+        amt1=fx_g[l][7]*Q15/100;
+        g->frozen=!!fx_g[l][6];g->freeze_left=0;
+    }
     len = (uint32_t)len_ms * 441u / 10u;
     interval = (uint32_t)(int_ms > 1 ? int_ms : 1) * 441u / 10u;
     if (interval < 66u)
@@ -262,7 +283,7 @@ static void gran_block(uint32_t l, int32_t *x, uint32_t n, int32_t v, int any)
         }
         if (--g->next <= 0 && v) {                       /* the next grain */
             int32_t j = mulq15(rnd_bi(&g->r), jit);
-            gran_spawn(g, v, a, len, scat, norm);
+            gran_spawn(g, l, v, a, len, scat, norm);
             g->next = (int32_t)interval + mulq15((int32_t)interval, j);
             if (g->next < 8)
                 g->next = 8;

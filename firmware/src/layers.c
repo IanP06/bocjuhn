@@ -846,8 +846,28 @@ static void clock_insert(clock_req e) {
             if(old->vel>e.vel)e.vel=old->vel;*old=e;return;
         }
     }
-    for(uint32_t i=0;i<CLOCK_Q;i++) if(!clock_q[i].state) {clock_q[i].e=e;clock_q[i].state=1;return;}
+    for(uint32_t i=0;i<CLOCK_Q;i++) if(!clock_q[i].state) {clock_q[i].e=e;clock_q[i].voice=255;clock_q[i].state=1;return;}
     clock_dropped++;
+}
+/* Each scheduled gate owns its voice generation. Quantized overlaps must not
+ * steal a previous note's release, including overlapping takes of one pitch. */
+static void clock_release(uint32_t i) {
+    clock_req *e=&clock_q[i].e;
+    uint32_t src=e->target==CK_LOOP?SRC_LOOP:SRC_CLOCK;
+    int shared=0;
+    for(uint32_t j=0;j<CLOCK_Q;j++)if(j!=i && clock_q[j].state==2) {
+        clock_req *o=&clock_q[j].e;
+        if(o->l==e->l && o->note==e->note && (o->target==CK_LOOP)==(e->target==CK_LOOP))shared=1;
+    }
+    uint32_t k=clock_q[i].voice;
+    if(k<NVOICE && lay[e->l].engine!=ENG_ANIMA) {
+        voice_t *v=&vox[k];
+        if(v->age==clock_q[i].age && v->gate && vox_owner(v)==e->l && v->note==e->note && v->src==src) {
+            v->gate=0;
+            if(!v->pend && !lay[e->l].xfade)voice_off(e->l,k);
+        }
+        if(!shared){midi_note_out(e->l,e->note,0,0);if(src==SRC_LOOP)rx_lq_put(e->l,e->note,0);}
+    } else if(!shared)note_off(e->l,e->note,src);
 }
 static void clock_audio(void) {
     while(clock_r!=clock_w) {
@@ -861,7 +881,7 @@ static void clock_audio(void) {
         int cancel=e->epoch!=clock_cancel[e->l][e->target];
         if(e->target==CK_LOOP && (!loop[e->l].play || (e->take && ((loop[e->l].mute>>(e->take-1u))&1u)))) cancel=1;
         if(cancel || (clock_q[i].state==2 && (int32_t)(clock_tick-e->due)>=0)) {
-            if(clock_q[i].state==2) note_off(e->l,e->note,e->target==CK_LOOP?SRC_LOOP:SRC_CLOCK);
+            if(clock_q[i].state==2) clock_release(i);
             clock_q[i].state=0;
         }
     }
@@ -870,13 +890,11 @@ static void clock_audio(void) {
         if((int32_t)(clock_tick-e->due)>=0) {
             /* Never replay a backlog of missed notes after a pause. */
             if((int32_t)(clock_tick-e->due)>960) {clock_q[i].state=0;continue;}
-            for(uint32_t j=0;j<CLOCK_Q;j++) if(j!=i && clock_q[j].state==2) {
-                clock_req *old=&clock_q[j].e;
-                if(old->l==e->l && old->note==e->note && (old->target==CK_LOOP)==(e->target==CK_LOOP)) {
-                    if(lay[e->l].engine!=ENG_ANIMA)note_off(old->l,old->note,old->target==CK_LOOP?SRC_LOOP:SRC_CLOCK);clock_q[j].state=0;
-                }
-            }
+            uint32_t age=lay_age;
             note_vel=e->vel; note_on(e->l,e->note,e->target==CK_LOOP?SRC_LOOP:SRC_CLOCK); note_vel=127;
+            if(lay_age!=age)for(uint32_t k=0;k<NVOICE;k++)if(vox[k].age==lay_age) {
+                clock_q[i].voice=(uint8_t)k;clock_q[i].age=lay_age;break;
+            }
             e->due+=e->len; clock_q[i].state=2;
         }
     }
@@ -1706,8 +1724,8 @@ static void loop_sync_run(uint32_t l) {
             uint32_t e=p->ev[t->first+st->ix],time=LE_T(e),note=LE_NOTE(e);
             if((int)LE_ON(e)==(int)st->reverse) {st->ix+=st->reverse?-1:1;continue;}
             uint32_t offset=clock_scale(st->reverse?t->len-1-time:time,cycle,t->len);
-            if(grid) offset=((offset+grid/2)/grid)*grid;
-            if(offset>=cycle) offset=cycle-1;
+            offset=clock_snap(offset,grid,clk.div[l][CK_LOOP]==10);
+            /* Last onset may belong exactly to the next downbeat. Keep its gate. */
             uint32_t due=st->start+offset;
             if((int32_t)(due-clock_tick)>16) break;
             uint32_t duration=st->reverse?time+1:t->len-time;
@@ -1973,6 +1991,7 @@ static int layer_sounding(uint32_t l)
 
 #include "gran.c"
 #include "delay.c"
+#include "fx_runtime.h"
 
 /* voice k's fade over: the note it waited for, on the layer it goes to (unless that layer is fading for a change:
  * then its change plays it) */
@@ -2120,6 +2139,7 @@ static void blk_render(void)
                                                           * turn; FM and ANIMA take theirs as turned) */
         }
     }
+    fx_update();
     audio_worker_check();
     {   /* several HIVE voices at once: each thinned (hive.c hv_thin) */
         uint32_t nh = 0;
@@ -2350,7 +2370,7 @@ static void layer_block(uint32_t l, int32_t *mixl, int32_t *mixr, int32_t *rvin,
         }
     }
     int32_t m_gr = mod_val(l, MD_GR, lay_gr[l], -FLT_MAX, FLT_MAX);   /* (the knobs as the modulation moves them) */
-    if (!any && !(gran[l].tail && (m_gr || gran[l].amt))) {   /* (grains ring on a while after the voices) */
+    if (!any && !((gran[l].tail || (fx_g[l][6] && fx_g[l][7])) && (m_gr || gran[l].amt || fx_g[l][7]))) {   /* (grains ring on a while after the voices) */
         y->meter -= y->meter >> 4;
         y->g = lay_gain[l];
         y->pl = lay_pl[l];

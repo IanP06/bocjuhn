@@ -1,3 +1,11 @@
+# RC8 — estado de prueba
+
+**Pendiente de validación física.** RC8 B108 pasa las pruebas de software,
+WebAssembly y empaquetado descritas en [RC8.md](RC8.md). La confirmación de
+RC7 que sigue no se extiende a los cambios DSP y de cuantización de RC8.
+
+---
+
 # RC7 — registro de prueba en FM1
 
 Estado: **PROBADO EN FM1 REAL — FUNCIONAMIENTO CONFIRMADO POR EL PROPIETARIO**.

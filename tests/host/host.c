@@ -5991,10 +5991,10 @@ static int cmd_mod(const char *dir)
     memset(host_flash, 0xFF, sizeof host_flash);
     ses_scan(1);
     press_btn(B_FX);
-    for (k = 0; k < 3u; k++)
+    for (k = 0; k < 5u; k++)
         press_btn(B_SEQ);                             /* DELAY, REVERB, MOD */
     if (!ui.mod_page)
-        printf("FAIL mod: the third SEQ is not the MOD page\n"), fail++;
+        printf("FAIL mod: the fifth SEQ is not the MOD page\n"), fail++;
     host_enc[PANEL_ENC[EN_K2]] = 70;                  /* LFO 1: RATE 70 (~2 Hz) */
     ui_input();
     ui.force = 1;
@@ -6056,7 +6056,7 @@ static int cmd_mod(const char *dir)
     }
     {   /* SHIFT + SEQ: thrown anew -- two to four slots, every value in its range, the destinations of all sorts */
         mod_t before = lay_mod[0];
-        uint32_t seen = 0, bad = 0, i;
+        uint64_t seen=0; uint32_t bad=0,i;
         press_btn(B_FX);
         press_phys(KEY_SHIFT, 1);
         press_btn(B_SEQ);
@@ -6068,15 +6068,15 @@ static int cmd_mod(const char *dir)
             for (i = 0, n = 0; i < NMSLOT; i++)
                 if (lay_mod[5].s[i].src) {
                     n++;
-                    seen |= 1u << lay_mod[5].s[i].dst;
+                    seen |= 1ull << lay_mod[5].s[i].dst;
                 }
             bad += n < 2u;
             memcpy(&before, &lay_mod[5], sizeof before);
             mod_check();
             bad += memcmp(&before, &lay_mod[5], sizeof before) != 0;
         }
-        printf("mod: SHIFT + SEQ, 300 throws: %u destinations of %u seen, %u bad\n", (unsigned)__builtin_popcount(seen), MD_N, bad);
-        if (bad || __builtin_popcount(seen) < (int)MD_N)
+        printf("mod: SHIFT + SEQ, 300 throws: %u destinations of %u seen, %u bad\n", (unsigned)__builtin_popcountll(seen), MD_N, bad);
+        if (bad || __builtin_popcountll(seen) < (int)MD_N)
             printf("FAIL mod: the throws\n"), fail++;
     }
     printf("mod: %s\n", fail ? "FAILED" : "ok");
@@ -6935,7 +6935,7 @@ static int cmd_russolo(const char *dir)
     return fail ? 1 : 0;
 }
 
-/* PLAY ALONG (react.c, SEQ's fourth page): SEQ four times brings it; the guide's button lit, the tracks taken in a
+/* PLAY ALONG (react.c, SEQ's fourth page): SEQ six times brings it; the guide's button lit, the tracks taken in a
  * glow, the others dark; the guide's button says GUIDE TRACK; PLAY on and off; PRESETS the mode; KNOB 1 .. 4 its
  * values (ARPEGGIO: SELECT and ALGORITHM too, the level kept). In each mode, a guide playing: the tracks taken in
  * play, in the scale, never on the guide, the others never; off: every note let go */
@@ -6984,11 +6984,11 @@ static int cmd_playalong(void)
     sounds_init();
     master_q12 = 4096;
     press_btn(B_FX);
-    for (j = 0; j < 4u; j++)
+    for (j = 0; j < 6u; j++)
         press_btn(B_SEQ);
     ui_leds();
     if (!rx_page_up() || !host_led[PANEL_BTN[B_SEQ]])
-        printf("FAIL playalong: SEQ four times does not bring the PLAY ALONG page\n"), fail++;
+        printf("FAIL playalong: SEQ six times does not bring the PLAY ALONG page\n"), fail++;
     ui_draw();
     press_btn(B_FX);                                  /* the guide's own button: GUIDE TRACK, not taken */
     if (rx.mask & 1u || strcmp(ui.msg, "GUIDE TRACK") || ui.sel != 0u)

@@ -86,7 +86,8 @@ EMSCRIPTEN_KEEPALIVE int32_t *sim_state(void)
     web_state[10] = loop_pct(loop[ui.sel].trk[ui.speed_loop].speed_pct);
     web_state[11] = ui.speed_loop; web_state[12] = ui.gr[ui.sel]; web_state[13] = fm1_ms;
     web_state[14] = master_q12 * 100 / 4096; web_state[15] = ses.n;
-    for (int j = 0; j < 4; j++) web_state[16+j] = gr_edit[ui.sel][j];
+    for (int j = 0; j < 4; j++) web_state[16+j] = ui.gr_page==2?fx.grain[ui.sel][j]:gr_edit[ui.sel][j];
+    web_state[20]=ui.rv_page;web_state[21]=ui.fx;
     for (int l = 0; l < NLAYER; l++) {
         web_state[24+l] = loop[l].ntrk;
         web_state[30+l] = loop[l].play;

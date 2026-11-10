@@ -12,8 +12,11 @@ const button=n=>{c._sim_button(n,1);c._sim_button(n,0);};
 const render=n=>{let energy=0;while(n--){const at=c._sim_render(1024)/4;for(const x of c.HEAPF32.subarray(at,at+2048)){assert(Number.isFinite(x));energy+=x*x;}}return energy;};
 button(1);assert.equal(state()[1],1);
 c._sim_key(0,1);assert(render(20)>0.001);c._sim_key(0,0);render(20);
-for(let i=0;i<5;i++)button(9);
-assert.equal(state()[48],1,'SEQ fifth page CLOCK');assert.equal(state()[50],120);
+for(let i=0;i<7;i++) {
+  button(9);
+  if(i<4) {assert.equal(state()[20],i%2+1);assert.equal(state()[21],i<2?1:0);}
+}
+assert.equal(state()[48],1,'SEQ seventh page CLOCK');assert.equal(state()[50],120);
 c._sim_encoder(3,13);assert.equal(state()[50],133);
 c._sim_encoder(4,2);assert.equal(state()[51],2);
 c._sim_encoder(5,1);assert.equal(state()[52],1);
@@ -22,5 +25,8 @@ button(2);assert.equal(state()[48],1);assert.equal(state()[52],0,'other track re
 button(1);assert.equal(state()[52],1,'track clock retained');
 button(9);assert.equal(state()[49],1,'ACID settings follows CLOCK');
 button(9);assert.equal(state()[49],0,'SEQ exits');
+c._sim_key(25,1);c._sim_encoder(4,1);c._sim_key(25,0);
+assert.equal(state()[3],1,'GRAINS page');button(9);assert.equal(state()[3],2,'PRISM page');
+c._sim_encoder(6,20);assert.equal(state()[19],20,'PRISM mix reflected in simulator controls');
 c._sim_panic();render(100);
 console.log('WASM ACID/CLOCK: audio, page traversal, BPM, per-target config and track isolation PASS');
