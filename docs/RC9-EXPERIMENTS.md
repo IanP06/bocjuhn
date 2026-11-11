@@ -1,3 +1,5 @@
+> Historical design notes from the filter-only candidate. RYUJI is now implemented; see [RC9](RC9.md) for current behavior and validation.
+
 # RC9 development candidate
 
 Local development branch: `codex/accompaniment-filters-rc9`. Public RC8 remains the published release. RYUJI bank changes are proposals, not implemented. Hardware validation pending.

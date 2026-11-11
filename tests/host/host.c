@@ -4793,7 +4793,8 @@ static int cmd_env(const char *dir)
         lng = env_peak(40);
         printf("env: %s: held %d, 70 ms after a 26 ms release %d, 0.2 s into a 20 s one %d\n", ENG_NAME[e], hold,
                after, lng);
-        if (hold < 300 || after > hold / 300 || lng < hold / 20)
+        /* RYUJI is a finite one-shot: a long release cannot extend its source. */
+        if ((e != ENG_BAY && (hold < 300 || lng < hold / 20)) || after > maxi(hold / 300, 2))
             printf("FAIL env: %s: the release does not follow the knob\n", ENG_NAME[e]), fail++;
         lm_key(KEY_ENV);
         if (ui.env_page)

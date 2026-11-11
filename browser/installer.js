@@ -5,7 +5,7 @@ let pkg,updater,device,busy=false;
 function refresh(){ $('connect').disabled=busy||!pkg; $('install').disabled=busy||!pkg||!device||!$('agree').checked||!$('recovery').checked; }
 function say(s,d=''){ $('status').textContent=s;$('detail').textContent=d; }
 async function init(){try{
-  const base='../release/bocjuhn-1.0-rc8/';
+  const base='../release/bocjuhn-1.0-rc9/';
   const meta=await (await fetch(base+'manifest.json',{cache:'no-store'})).json();
   const response=await fetch(base+meta.file,{cache:'no-store'});
   if(!response.ok)throw Error('Package unavailable');
@@ -27,7 +27,7 @@ $('connect').onclick=async()=>{busy=true;refresh();try{
 const guard=e=>{e.preventDefault();e.returnValue='';};
 $('install').onclick=async()=>{
   if(busy||!pkg||!device||!$('agree').checked||!$('recovery').checked)return;
-  if(!confirm(`Install ${pkg.product} on ${device.id.text}? This tests the RC8 changes. Do not disconnect power or USB while writing.`))return;
+  if(!confirm(`Install ${pkg.product} on ${device.id.text}? This tests the RC9 changes. Do not disconnect power or USB while writing.`))return;
   busy=true;refresh();window.addEventListener('beforeunload',guard);$('progress').hidden=false;
   try{
     const id=await updater.install(device,pkg.image,pkg.product,(stage,value)=>{

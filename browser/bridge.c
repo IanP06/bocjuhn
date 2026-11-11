@@ -76,6 +76,7 @@ EMSCRIPTEN_KEEPALIVE uint16_t *sim_screen(void) { return fb; }
 EMSCRIPTEN_KEEPALIVE uint8_t *sim_leds(void) { return host_led; }
 EMSCRIPTEN_KEEPALIVE int32_t *sim_state(void)
 {
+    web_state[22]=ui.kit_page;web_state[23]=ui.kit_pad;
     web_state[48]=ui.clock_page;web_state[49]=ui.acid_page;web_state[50]=clk.bpm;
     web_state[51]=ui.clock_target;web_state[52]=clk.mode[ui.sel][ui.clock_target];
     web_state[53]=clk.div[ui.sel][ui.clock_target];web_state[54]=clk.bars[ui.sel];

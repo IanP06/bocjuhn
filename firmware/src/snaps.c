@@ -87,6 +87,7 @@ static uint8_t snap_rxguide[NSNAP], morph_rxguide;
 static int16_t snap_acid[NSNAP][NLAYER][4] POOL;
 static int8_t snap_filter[NSNAP][NLAYER][2], morph_filter[NLAYER][2];
 static snd_ent_t snd_tab[SND_N];
+static ba_kit_t snd_kit[SND_N] POOL;
 static lat_ent_t lat_tab[LAT_N + 1u];   /* (entry 0: none) */
 static bln_ent_t bln_tab[BLN_N + 1u];
 static take_t take_tab[NLAYER][NTAKE];
@@ -147,17 +148,18 @@ static void snap_mark(int skip)
         mark_one(&morph_b);
 }
 /* an entry the same, or a free one taken (-1: full) */
-static int snd_intern(const snd_ent_t *e)
+static int snd_intern(const snd_ent_t *e,const ba_kit_t *kit)
 {
     uint32_t i;
     for (i = 0; i < SND_N; i++)
-        if (snd_in[i] && !memcmp(&snd_tab[i], e, sizeof *e))
+        if (snd_in[i] && !memcmp(&snd_tab[i], e, sizeof *e) && (!kit || !memcmp(&snd_kit[i],kit,sizeof *kit)))
             return (int)i;
     for (i = 0; i < SND_N && snd_in[i]; i++)
         ;
     if (i == SND_N)
         return -1;
     snd_tab[i] = *e;
+    if(kit)snd_kit[i]=*kit;else memset(&snd_kit[i],0,sizeof snd_kit[i]);
     snd_in[i] = 1;
     return (int)i;
 }
@@ -275,7 +277,8 @@ static int snap_capture(snap_t *s, int intern)
             e.env_on = ui.env_on[l][k];
             memcpy(e.mac, ui.mac[l][k], NMAC);
             memcpy(e.env, ui.env[l][k], 4u);
-            if ((i = snd_intern(&e)) < 0)
+            ba_kit_t kit;ba_kit_get(&ba_buf[l][ba_pub[l]],&kit);
+            if ((i = snd_intern(&e,k==ENG_BAY?&kit:0)) < 0)
                 return 0;
             t->snd[k] = (uint8_t)i;
         }
@@ -423,9 +426,11 @@ static int snap_sound(uint32_t l, uint32_t e, const snd_ent_t *s)
     uint32_t seed, word, path = s->word >> 24, gen = s->word >> 20 & 15u;
     uint8_t kind;
     sound_rec(l, e, &seed, &word, &kind);
-    if ((seed != s->seed || word != s->word || kind != s->kind) &&
+    ba_kit_t kit;ba_kit_get(&ba_buf[l][ba_pub[l]],&kit);
+    const ba_kit_t *wanted=e==ENG_BAY?&snd_kit[s-snd_tab]:0;
+    if ((seed != s->seed || word != s->word || kind != s->kind || (wanted && memcmp(&kit,wanted,sizeof kit))) &&
         !sound_from_seed(l, e, s->seed, path < PATH_N ? path : PATH_OPEN, gen < GEN_N ? gen : 0u, (int32_t)(s->word & 0xFFFFFu),
-                         (int32_t)s->kind))
+                         (int32_t)s->kind,wanted))
         return 0;
     memcpy(ui.mac[l][e], s->mac, NMAC);
     memcpy(ui.env[l][e], s->env, 4u);
@@ -452,7 +457,8 @@ static int snap_same_sound(uint32_t l, const snap_trk_t *t)
     if (ui.engine[l] != t->engine)
         return 0;
     sound_rec(l, t->engine, &seed, &word, &kind);
-    return seed == s->seed && word == s->word && kind == s->kind;
+    ba_kit_t kit;ba_kit_get(&ba_buf[l][ba_pub[l]],&kit);
+    return seed == s->seed && word == s->word && kind == s->kind && (t->engine!=ENG_BAY || !memcmp(&kit,&snd_kit[s-snd_tab],sizeof kit));
 }
 /* track l's latched notes and chords as the entry's: those that stay sound on, the others let go or struck */
 static void snap_latches(uint32_t l, const lat_ent_t *e)
@@ -873,6 +879,7 @@ static void snap_reset(void)
 {
     morph_end();
     memset(snap_speed, 0, sizeof snap_speed);
+    memset(snd_kit,0,sizeof snd_kit);
     memset(snap_gr, 0, sizeof snap_gr);
     memset(snap_art,0,sizeof snap_art);
     memset(snap_filter, 0, sizeof snap_filter);

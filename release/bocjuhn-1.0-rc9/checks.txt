@@ -1,0 +1,26 @@
+RYUJI PCM: 219828 bytes; 48 sources; 5 families
+RYUJI ENVELOPE PASS: all 48 sources sample-identical with hold on/off; finite tails; zero sample endpoints
+RYUJI MIXER ENVELOPE PASS: held maximum-sustain pad ends with its one-shot
+RYUJI KIT PASS: sources/tune, weighted random, locks, presets, snapshots, sessions, dormant engine, envelope identity and editor
+REACT: guide loop continues on follower and third-track selection PASS
+SHADOW: guide loop continues on follower and third-track selection PASS
+ARPEGGIO: guide loop continues on follower and third-track selection PASS
+Filter stopband: LP12 -38.13 dB, LP24 -65.88 dB; HP12 -36.16 dB, HP24 -59.11 dB; resonance Q4->Q12 9.53 dB
+Six-track full-mix cutoff sweeps, seven types at maximum resonance PASS
+Host benchmark, six tracks 2 poles: 0.053 seconds (not FM1 timing)
+Host benchmark, six tracks 4 poles: 0.080 seconds (not FM1 timing)
+Accompaniment, persisted guide, RC8 migration, filter slopes and resonance PASS
+PRISM pitch -24 energy 475585683 frozen 0 mix 100
+PRISM pitch -12 energy 407787198 frozen 0 mix 100
+PRISM pitch 0 energy 248097008 frozen 0 mix 100
+PRISM pitch 12 energy 206675815 frozen 0 mix 100
+PRISM pitch 24 energy 482836972 frozen 0 mix 100
+FX/CLOCK PASS: owned overlapping gates, mixed grid, wrapped notes, UI, modulation, sessions, snapshots, 6 reverbs, 20 delay/rhythm combinations, PRISM pitch extremes/freeze
+RYUJI WASM: kit page, audio, source/tune/lock controls and random PASS
+WASM ACID/CLOCK: audio, page traversal, BPM, per-target config and track isolation PASS
+loader: image 8112 B, ota.bin 6836 B
+image 522904 B of 581564; RAM .data+.bss 97252 B of 98304; pool 330480 B of 344064
+bocjuhn-1.0-rc9.fwsc 609992 bytes; version B109 SHA256 f2070b5b6e2fbe6834af2fc8965c455619022f5a6555ecbe5634973767ea8f2f
+
+Additional host regressions passed: interval, flows, latch, playalong, loopmodes, looptie, tracktransp, setup, backup, presets, macros, overdubs, snaps, sessions (64 small sessions before FULL), mod. Browser backup round trip: PASS.
+Hardware validation pending.

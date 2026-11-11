@@ -1,3 +1,10 @@
+# RC9 — estado de prueba
+
+Validacion fisica pendiente. RYUJI, filtros y acompanamiento pasan pruebas de host y simulador. Ver RC9.md y el manifest de la release.
+
+---
+
+
 # RC8 — estado de prueba
 
 **Pendiente de validación física.** RC8 B108 pasa las pruebas de software,

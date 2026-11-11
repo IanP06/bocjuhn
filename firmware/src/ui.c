@@ -118,6 +118,7 @@ static struct {
     uint8_t bb_page;             /* the chosen track's balls' page is up (it closes as the other pages do) */
     uint8_t vary_shown;
     uint8_t clock_page, clock_target, acid_page;
+    uint8_t kit_page, kit_pad;
     uint8_t filter_page, gr_page, speed_page, speed_loop; /* INTERVAL: continuous loop clocks */
     uint8_t bl_page;             /* the chosen track's BRICKLAYER page is up (closes as the other pages do) */
     uint8_t env_down, env_done;  /* the envelope key down since env_t0 (let go soon: ENVELOPE; held: BRICKLAYER's page) */
@@ -558,7 +559,7 @@ static void save_long(void)
     }
     if (ui.ses_page == SP_ASK)
         return;
-    ui.rv_page = ui.filter_page = ui.gr_page = ui.speed_page = ui.env_page = ui.bb_page = ui.bl_page = 0;
+    ui.rv_page = ui.kit_page = ui.filter_page = ui.gr_page = ui.speed_page = ui.env_page = ui.bb_page = ui.bl_page = 0;
     if (ui.ses_page == SP_LIST && ui.ses_ix != ses_current()) {   /* in the list: into the slot shown, asked */
         ui.ses_new = ui.ses_ix;
         ui.ses_over = (uint8_t)ses_has(ui.ses_ix);
@@ -627,7 +628,7 @@ static void save_short(void)
         ui.force = 1;
         return;
     }
-    ui.filter_page = ui.gr_page = ui.speed_page = ui.rv_page = ui.env_page = ui.bb_page = ui.bl_page = ui.sc_page = ui.mod_page = ui.rx_page = 0;   /* the SNAPSHOTS
+    ui.kit_page = ui.filter_page = ui.gr_page = ui.speed_page = ui.rv_page = ui.env_page = ui.bb_page = ui.bl_page = ui.sc_page = ui.mod_page = ui.rx_page = 0;   /* the SNAPSHOTS
                                                                                                       * page, framed
                                                                                                       * on the last */
     ui.snap_page = 1;
@@ -646,7 +647,7 @@ static void ses_page_toggle(void)
         ui.force = 1;
         return;
     }
-    ui.filter_page = ui.gr_page = ui.speed_page = ui.rv_page = ui.env_page = ui.bb_page = ui.bl_page = ui.sc_page = ui.mod_page = ui.rx_page = ui.snap_page = 0;
+    ui.kit_page = ui.filter_page = ui.gr_page = ui.speed_page = ui.rv_page = ui.env_page = ui.bb_page = ui.bl_page = ui.sc_page = ui.mod_page = ui.rx_page = ui.snap_page = 0;
     ui.pre_page = 0;
     ui.ses_page = SP_LIST;
     ui.ses_ix = (uint8_t)(ses_current() ? ses_current() : 1);
@@ -849,14 +850,14 @@ static void ui_input(void)
             ui.sel = (uint8_t)l;
             if(ui.engine[l]!=ENG_ANIMA)ui.acid_page=0;
             ui.force=1;
-            ui.filter_page = ui.gr_page = ui.speed_page = 0;
+            ui.kit_page = ui.filter_page = ui.gr_page = ui.speed_page = 0;
             ui.vary_shown = 0;
             ui.env_nat_ok = 0;
             if (ui.rv_page || ui.ses_page || ui.snap_page || ui.sc_page || ui.pre_page || ui.env_page || ui.bb_page || ui.bl_page || ui.mod_page ||
                 ui.set_page) {   /* a layer chosen:
                                                                                                     * back to it */
                 ui.rv_page = 0;
-                ui.filter_page = ui.gr_page = ui.speed_page = ui.env_page = ui.bb_page = ui.bl_page = 0;
+                ui.kit_page = ui.filter_page = ui.gr_page = ui.speed_page = ui.env_page = ui.bb_page = ui.bl_page = 0;
                 ui.ses_page = ui.snap_page = 0;
                 ui.sc_page = 0;
                 ui.pre_page = ui.set_page = ui.mod_page = ui.rx_page = 0;
@@ -911,7 +912,7 @@ static void ui_input(void)
             ui.rv_page = 1;
             ui.fx = 1;
         }
-        ui.filter_page = ui.gr_page = ui.speed_page = ui.env_page = ui.bb_page = ui.bl_page = 0;
+        ui.kit_page = ui.filter_page = ui.gr_page = ui.speed_page = ui.env_page = ui.bb_page = ui.bl_page = 0;
         ui.ses_page = ui.snap_page = 0;
         ui.pre_page = ui.set_page = 0;
         ui.sc_page = 0;
@@ -926,7 +927,7 @@ static void ui_input(void)
             ui.pre_eng = ui.engine[ui.sel];
             if (!ui.pre_ix)
                 ui.pre_ix = 1;
-            ui.filter_page = ui.gr_page = ui.speed_page = ui.rv_page = ui.ses_page = ui.snap_page = ui.sc_page = ui.env_page = ui.bb_page = ui.bl_page = ui.set_page = ui.mod_page = ui.rx_page = 0;
+            ui.kit_page = ui.filter_page = ui.gr_page = ui.speed_page = ui.rv_page = ui.ses_page = ui.snap_page = ui.sc_page = ui.env_page = ui.bb_page = ui.bl_page = ui.set_page = ui.mod_page = ui.rx_page = 0;
         }
         ui.force = 1;
     } else if (btn_bit(press, B_ARP) && ui.pre_page) {   /* the PRESETS page (where SHIFT + ARP opens it): ARP held saves
@@ -937,7 +938,7 @@ static void ui_input(void)
     } else if (btn_bit(press, B_ARP)) {
         ui.sc_page = (uint8_t)!ui.sc_page;
         ui.rv_page = 0;
-        ui.filter_page = ui.gr_page = ui.speed_page = ui.env_page = ui.bb_page = ui.bl_page = 0;
+        ui.kit_page = ui.filter_page = ui.gr_page = ui.speed_page = ui.env_page = ui.bb_page = ui.bl_page = 0;
         ui.ses_page = ui.snap_page = 0;
         ui.pre_page = ui.set_page = ui.mod_page = ui.rx_page = 0;
         ui.force = 1;
@@ -992,13 +993,13 @@ static void ui_input(void)
         }
     }
     sh = (int)((fm1_in.notes >> KEY_SHIFT) & 1u);  /* (SHIFT read once: the knobs below all see the same) */
-    if (sh && !(ui.bl_page && ui.engine[ui.sel]==ENG_ANIMA) && !ui.acid_page && !ui.clock_page && !ui.rv_page && !ui.filter_page && !ui.gr_page && !ui.snap_page && (s = enc_take(EN_K4)) != 0) {   /* SHIFT + KNOB 4: the track's delay send */
+    if (sh && !(ui.bl_page && ui.engine[ui.sel]==ENG_ANIMA) && !ui.acid_page && !ui.clock_page && !ui.rv_page && !ui.kit_page && !ui.filter_page && !ui.gr_page && !ui.snap_page && (s = enc_take(EN_K4)) != 0) {   /* SHIFT + KNOB 4: the track's delay send */
         ui.dsend[ui.sel] = (int8_t)clampi(ui.dsend[ui.sel] + 2 * s, 0, 100);
         level_pan_apply(ui.sel);
         ui.dial = DIAL_DSEND;
         ui.dial_until = fm1_ms + 1000u;
     }
-    if (sh && !(ui.bl_page && ui.engine[ui.sel]==ENG_ANIMA) && !ui.acid_page && !ui.clock_page && !ui.rv_page && !ui.filter_page && !ui.gr_page && !ui.snap_page && (s = enc_take(EN_K3)) != 0) {   /* SHIFT + KNOB 3: the track's distortion */
+    if (sh && !(ui.bl_page && ui.engine[ui.sel]==ENG_ANIMA) && !ui.acid_page && !ui.clock_page && !ui.rv_page && !ui.kit_page && !ui.filter_page && !ui.gr_page && !ui.snap_page && (s = enc_take(EN_K3)) != 0) {   /* SHIFT + KNOB 3: the track's distortion */
         ui.dist[ui.sel] = (int8_t)clampi(ui.dist[ui.sel] + 2 * s, 0, 100);
         level_pan_apply(ui.sel);
         ui.dial = DIAL_DIST;
@@ -1025,6 +1026,14 @@ static void ui_input(void)
             else clk.div[l][t]=(uint8_t)clampi((int)clk.div[l][t]+s,0,t==CK_LOOP?10:5);
             if(t!=CK_LOOP || sh)clock_cancel[l][t]++; ui.force=1;
         }
+    } else if (ui.kit_page) {
+        unsigned l=ui.sel;ba_kit_t kit;ba_kit_get(&ba_buf[l][ba_pub[l]],&kit);int changed=0;
+        if((s=enc_take(EN_K1))){ui.kit_pad=(uint8_t)clampi(ui.kit_pad+s,0,15);ui.force=1;}
+        unsigned pad=ui.kit_pad;
+        if((s=enc_take(EN_K2))){kit.source[pad]=(uint8_t)ba_next_source(pad,kit.source[pad],s);changed=1;}
+        if((s=enc_take(EN_K3))){kit.tune[pad]=(int8_t)clampi(kit.tune[pad]+s,-24,24);changed=1;}
+        if((s=enc_take(EN_K4))){if(s>0)kit.locks|=1u<<pad;else kit.locks&=~(1u<<pad);changed=1;}
+        if(changed){if(!ba_edit_kit(l,&kit))say("WAIT / RETRY",500);ui.force=1;}
     } else if (ui.filter_page) {
         if ((s=enc_take(EN_K1))) {
             if (sh) ui.filter_page=0;
@@ -1181,8 +1190,10 @@ static void ui_input(void)
             ui.dial_until = fm1_ms + 1000u;
         }
     }
-    if (btn_bit(press, B_HOME))                  /* a new sound; with SHIFT, of the same family */
-        new_sound((int)((fm1_in.notes >> KEY_SHIFT) & 1u));
+    if (btn_bit(press, B_HOME)) {
+        if(ui.kit_page){ba_kit_t kit;ba_kit_get(&ba_buf[ui.sel][ba_pub[ui.sel]],&kit);ba_kit_random(&kit,next_seed(),sh?ui.kit_pad:-1);say(ba_edit_kit(ui.sel,&kit)?"KIT RANDOM":"WAIT / RETRY",700);ui.force=1;}
+        else new_sound((int)((fm1_in.notes >> KEY_SHIFT) & 1u));
+    }
     if (ui.bl_page && bl.on[ui.sel] && btn_bit(press, B_REC)) {   /* BRICKLAYER's page: REC is its entry */
         if (sh) {                                /* SHIFT and REC: the last note out */
             if (bl.n[ui.sel])
@@ -1501,7 +1512,7 @@ static void ui_input(void)
             bl_toggle(ui.sel);
             ui.bl_page = bl.on[ui.sel];
             if (ui.bl_page)
-                ui.filter_page = ui.gr_page = ui.speed_page = ui.rv_page = ui.ses_page = ui.snap_page = ui.sc_page = ui.pre_page = ui.set_page = ui.env_page = ui.bb_page = 0;
+                ui.kit_page = ui.filter_page = ui.gr_page = ui.speed_page = ui.rv_page = ui.ses_page = ui.snap_page = ui.sc_page = ui.pre_page = ui.set_page = ui.env_page = ui.bb_page = 0;
             say(bl.on[ui.sel] ? "BRICKLAYER" : "BRICKLAYER OFF", 900);
             ui.force = 1;
             ui.env_down = 0;
@@ -1516,14 +1527,14 @@ static void ui_input(void)
         ui.env_done = 1;
         ui.bl_page = (uint8_t)!ui.bl_page;
         if (ui.bl_page)
-            ui.filter_page = ui.gr_page = ui.speed_page = ui.rv_page = ui.ses_page = ui.snap_page = ui.sc_page = ui.pre_page = ui.set_page = ui.env_page = ui.bb_page = 0;
+            ui.kit_page = ui.filter_page = ui.gr_page = ui.speed_page = ui.rv_page = ui.ses_page = ui.snap_page = ui.sc_page = ui.pre_page = ui.set_page = ui.env_page = ui.bb_page = 0;
         ui.force = 1;
     }
     if (ui.env_down && !(keys >> KEY_ENV & 1u)) {   /* let go soon: the ENVELOPE page up or down */
         ui.env_down = 0;
         if (!ui.env_done) {
             ui.env_page = (uint8_t)!ui.env_page;
-            ui.filter_page = ui.gr_page = ui.speed_page = ui.rv_page = ui.ses_page = ui.snap_page = ui.sc_page = ui.pre_page = ui.set_page = ui.bb_page = ui.bl_page = 0;
+            ui.kit_page = ui.filter_page = ui.gr_page = ui.speed_page = ui.rv_page = ui.ses_page = ui.snap_page = ui.sc_page = ui.pre_page = ui.set_page = ui.bb_page = ui.bl_page = 0;
             ui.force = 1;
         }
     }
@@ -1536,7 +1547,7 @@ static void ui_input(void)
             bb_toggle(ui.sel);
             ui.bb_page = bb.on[ui.sel];
             if (ui.bb_page)
-                ui.filter_page = ui.gr_page = ui.speed_page = ui.rv_page = ui.ses_page = ui.snap_page = ui.sc_page = ui.pre_page = ui.set_page = ui.env_page = ui.bl_page = 0;
+                ui.kit_page = ui.filter_page = ui.gr_page = ui.speed_page = ui.rv_page = ui.ses_page = ui.snap_page = ui.sc_page = ui.pre_page = ui.set_page = ui.env_page = ui.bl_page = 0;
             say(bb.on[ui.sel] ? "BALLSY" : "BALLSY OFF", 900);
             ui.force = 1;
             ui.edit_down = 0;
@@ -1546,12 +1557,17 @@ static void ui_input(void)
             ui.edit_t0 = fm1_ms;
         }
     }
+    if(ui.edit_down && (keys>>KEY_EDIT&1u) && !ui.edit_done && !bb.on[ui.sel] && ui.engine[ui.sel]==ENG_BAY && (uint32_t)(fm1_ms-ui.edit_t0)>=600u) {
+        unsigned was=ui.kit_page;ui.edit_done=1;
+        ui.filter_page=ui.gr_page=ui.speed_page=ui.rv_page=ui.ses_page=ui.snap_page=ui.sc_page=ui.pre_page=ui.set_page=ui.env_page=ui.bl_page=ui.mod_page=ui.rx_page=0;
+        ui.kit_page=(uint8_t)!was;ui.dial_until=0;ui.force=1;
+    }
     if (ui.edit_down && (keys >> KEY_EDIT & 1u) && !ui.edit_done && bb.on[ui.sel] &&
         (uint32_t)(fm1_ms - ui.edit_t0) >= 600u) {   /* held, the balls running: their page up or down */
         ui.edit_done = 1;
         ui.bb_page = (uint8_t)!ui.bb_page;
         if (ui.bb_page)
-            ui.filter_page = ui.gr_page = ui.speed_page = ui.rv_page = ui.ses_page = ui.snap_page = ui.sc_page = ui.pre_page = ui.set_page = ui.env_page = ui.bl_page = 0;
+            ui.kit_page = ui.filter_page = ui.gr_page = ui.speed_page = ui.rv_page = ui.ses_page = ui.snap_page = ui.sc_page = ui.pre_page = ui.set_page = ui.env_page = ui.bl_page = 0;
         ui.force = 1;
     }
     if (ui.edit_down && !(keys >> KEY_EDIT & 1u)) {   /* let go soon: EDIT on or off */
@@ -1640,7 +1656,10 @@ static void ui_input(void)
                 ui.force = 1;
             }
             uint32_t note = ui.engine[ui.sel]==ENG_BAY ? 48u+(uint32_t)white_ix(k) : scale_note(white_ix(k) + ui.lx + ui.lxt[ui.sel], ui.oct[ui.sel]), bit = 1u << k;
-            if(ui.engine[ui.sel]==ENG_BAY && !ui.bl_page && !ui.bb_page)say(PULSE_NAME[white_ix(k)&15],500);
+            if(ui.engine[ui.sel]==ENG_BAY && !ui.bl_page && !ui.bb_page) {
+                if(ui.kit_page){ui.kit_pad=(uint8_t)(white_ix(k)&15);ui.force=1;}
+                else say(PULSE_NAME[white_ix(k)&15],500);
+            }
             ui.key_layer[k] = KEY_NONE;
             if (ui.latch[ui.sel] & bit) {        /* a latched key: SHIFT held lets go of it; alone, nothing */
                 if ((keys >> KEY_SHIFT) & 1u) {
@@ -2758,13 +2777,30 @@ static void ui_draw(void)
         return;
     }
     if ((int32_t)(ui.dial_until - fm1_ms) > 0 && !ui.ses_page && !ui.snap_page && !ui.sc_page && !ui.rv_page && !ui.pre_page && !ui.ovd &&
-        !ui.env_page && !ui.filter_page && !ui.gr_page) {
+        !ui.env_page && !ui.kit_page && !ui.filter_page && !ui.gr_page) {
         if (ui.shown_page != 4 ||
             (ui.shown_dial != (int16_t)(dial_value() + ui.dial * 256) && (uint32_t)(fm1_ms - ui.dial_drawn_at) >= 40u))
             draw_dial();
         ui.shown_page = 4;
         ui.shown_ses = 0;
         return;
+    }
+    if(ui.kit_page) {
+        if(ui.force || ui.shown_page!=23) {
+            ba_kit_t kit;ba_kit_get(&ba_buf[ui.sel][ba_pub[ui.sel]],&kit);unsigned p=ui.kit_pad,n=kit.source[p];char value[24];
+            CV_AREA(0,0,240,240,C_BLACK) {
+                cv_text_c(8,&FONT_M,"RYUJI KIT",ui_color(ui.sel));
+                fmt_int(value,p+1);cv_text(12,42,&FONT_S,"K1 PAD",C_WHITE);cv_text(180,42,&FONT_S,value,ui_color(ui.sel));
+                cv_text(12,65,&FONT_S,PULSE_NAME[p],C_WHITE);
+                cv_text(12,96,&FONT_XS,"K2 SOURCE",C_WHITE);cv_text(130,96,&FONT_S,PULSE_FAMILY_NAME[PULSE_FAMILY[n]],ui_color(ui.sel));
+                cv_text(12,119,&FONT_S,PULSE_LABEL[n],C_WHITE);
+                fmt_int(value,kit.tune[p]);cv_text(12,150,&FONT_S,"K3 TUNE",C_WHITE);cv_text(180,150,&FONT_S,value,ui_color(ui.sel));
+                cv_text(12,181,&FONT_S,"K4 LOCK",C_WHITE);cv_text(180,181,&FONT_S,kit.locks&(1u<<p)?"ON":"OFF",ui_color(ui.sel));
+                cv_text_c(210,&FONT_XS,"HOME: RANDOM / SHIFT: PAD",C_WHITE);
+                cv_text_c(225,&FONT_XS,"HOLD EDIT: CLOSE",C_WHITE);
+            }
+        }
+        ui.shown_page=23;ui.force=0;return;
     }
     if (ui.filter_page) {
         static const char *const type[7]={"DJ", "LP 12", "HP 12", "BP 12", "LP 24", "HP 24", "BP 24"};

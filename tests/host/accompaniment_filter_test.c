@@ -46,7 +46,7 @@ int main(void) {
     rx.guide=2;rx_reset();snap_recall(0,0);assert(rx.guide==0 && rx_ear==0 && flt_edit[4][0]==6);
     /* Old RC8 records have no pinned guide extension: use the saved selection. */
     unsigned base=SES_LO+ses.sect[ses_find(23)]*SES_SECT;ses_head_t old;
-    memcpy(&old,host_flash+base,sizeof old);old.format=32772;old.len-=1+sizeof snap_rxguide;
+    memcpy(&old,host_flash+base,sizeof old);old.format=32772;old.len-=1+sizeof snap_rxguide+NLAYER*sizeof(ba_kit_t)+1+NLAYER*(1+sizeof(ba_kit_t));
     old.body_crc=ses_crc(host_flash+base+sizeof old,old.len-sizeof old,0);
     old.head_crc=ses_crc((const uint8_t*)&old,30,0);memcpy(host_flash+base,&old,sizeof old);
     assert(ses_load_slot(23)==SES_OK && rx.guide==ui.sel);

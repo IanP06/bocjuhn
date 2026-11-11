@@ -3,16 +3,16 @@ BOCJUHN — FIRMWARE HUB UPDATE
 Already listed: https://thefirmwarehub.com/#bocjuhn
 Repository: https://github.com/IanP06/bocjuhn
 Browser player: https://ianp06.github.io/bocjuhn/
-RC8 prerelease: https://github.com/IanP06/bocjuhn/releases/tag/v1.0.0-rc8
-Package: bocjuhn-1.0-rc8.fwsc
-Identity: FM-1_197100 / B108
+RC9 prerelease: https://github.com/IanP06/bocjuhn/releases/tag/v1.0.0-rc9
+Package: bocjuhn-1.0-rc9.fwsc
+Identity: FM-1_197100 / B109
 License: GPL-3.0-only, component licenses retained.
 
 The Hub reads the newest release with a .fwsc asset and root fmhub.json every
 three hours according to https://thefirmwarehub.com/submit/.
 No new submission or email is needed for this already listed repository.
-The card text and guide now describe RC8 Effects / PRISM.
+The card text and guide now describe RC9 Hybrid kits / pinned guide / filters.
 
 Hardware: RC7 operation was confirmed by the owner on 2026-11-02.
-RC8 software checks pass; RC8 physical validation remains pending.
-This update does not claim that RC8 has passed hardware installation/exit tests.
+RC9 software checks pass; RC9 physical validation remains pending.
+This update does not claim that RC9 has passed hardware installation/exit tests.

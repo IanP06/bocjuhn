@@ -1,4 +1,4 @@
-import createTonitor from './firmware-core.mjs?v=rc9-dev';
+import createTonitor from './firmware-core.mjs?v=rc9-kits';
 let core, lastFrame = 0, flashVersion = 0;
 function frame(force = false) {
   if (!core || (!force && performance.now() - lastFrame < 33)) return;
@@ -17,7 +17,7 @@ function frame(force = false) {
 self.onmessage = async ({data: d}) => {
   try {
     if (d.type === 'boot') {
-      core = await createTonitor({locateFile: path => new URL(path+'?v=rc9-dev',import.meta.url).href,
+      core = await createTonitor({locateFile: path => new URL(path+'?v=rc9-kits',import.meta.url).href,
         printErr: text => postMessage({type:'log', text})});
       const at = core._sim_flash();
       core.HEAPU8.fill(255, at, at + 0x100000);

@@ -2044,6 +2044,8 @@ static void voice_render(uint32_t k)
         /* Banks of 16 keep pad identity separate from octave. MIDI 48..63 is neutral. */
         int32_t oct=clampi((int32_t)(vox[k].note/16)-3+ba_register[l],-6,6);
         uint32_t rate=(uint32_t)ba_buf[l][ba_use[l]].fm1r;
+        if(PULSE_RATE[vmem[k].ba.source]==11025)rate>>=1;
+        if(vmem[k].ba.tune)rate=(uint32_t)(((uint64_t)rate*exp2_q16((int32_t)vmem[k].ba.tune*65536/12))>>16);
         vmem[k].ba.inc=oct<0?rate>>(-oct):rate<<oct;
         alive = ba_render_fp(&vmem[k].ba, &ba_buf[l][ba_use[l]], vb, CTL);
     } else if (e == ENG_HIVE) {
@@ -2690,7 +2692,8 @@ static void snd_measure(uint32_t l, uint32_t e, uint32_t k)   /* (its buffer k) 
         dr_measure(d);
     } else if (e == ENG_BAY) {
         ba_design_t *d = &ba_buf[l][k];
-        ba_design(d, d->kind, d->seed, d->path, d->gen);
+        ba_kit_t kit;ba_kit_get(d,&kit);
+        ba_design(d, d->kind, d->seed, d->path, d->gen);ba_kit_put(d,&kit);
         ba_measure(d);
     } else if (e == ENG_OB) {
         ob_design_t *d = &ob_buf[l][k];
@@ -2801,7 +2804,7 @@ static int new_cal(uint32_t l, uint32_t seed, uint32_t path)
 /* layer l's sound on engine e drawn again from what made it (a preset): its seed, path and generation, and the
  * level it was measured at, and its family (-1: drawn from the seed); published as a new sound is. 0: the ISR still
  * holds the other buffer */
-static int sound_from_seed(uint32_t l, uint32_t e, uint32_t seed, uint32_t path, uint32_t gen, int32_t level, int32_t kind)
+static int sound_from_seed(uint32_t l, uint32_t e, uint32_t seed, uint32_t path, uint32_t gen, int32_t level, int32_t kind, const ba_kit_t *kit)
 {
     uint32_t k;
     if (e == ENG_FM) {
@@ -2846,6 +2849,7 @@ static int sound_from_seed(uint32_t l, uint32_t e, uint32_t seed, uint32_t path,
         k = ba_use[l] ^ 1u;
         ba_design(&ba_buf[l][k], kind, seed, path, gen);
         ba_buf[l][k].out = level;
+        if(kit)ba_kit_put(&ba_buf[l][k],kit);
         RING_PUBLISH();
         ba_pub[l] = (uint8_t)k;
         snd_raw[l] &= (uint8_t)~(1u << ENG_BAY);   /* (measured) */
@@ -2987,4 +2991,10 @@ static const char *sound_name(uint32_t l, uint32_t e)
     if (e == ENG_FM)
         return FF_NAME[fm_buf[l][fm_pub[l]].family % FF_N];
     return AK_NAME[an_buf[l][an_pub[l]].kind % AK_N];
+}
+
+static int ba_edit_kit(uint32_t l,const ba_kit_t *kit) {
+    if(!sound_slot_free(&ba_pub[l],&ba_use[l]))return 0;
+    unsigned dst=ba_use[l]^1u;ba_buf[l][dst]=ba_buf[l][ba_pub[l]];
+    ba_kit_put(&ba_buf[l][dst],kit);RING_PUBLISH();ba_pub[l]=(uint8_t)dst;return 1;
 }

@@ -1,10 +1,43 @@
 /* SPDX-License-Identifier: GPL-3.0-only
- * RYUJI: PCM attacks with a crossfaded body for the track ADSR.
+ * RYUJI: finite PCM one-shots. Track ADSR changes amplitude, never playback topology.
  * ba_* identifiers retain the original engine slot and serialization fields.
  */
 #include "pulse_pcm.h"
+/* Fits unused legacy design fields: layout/size of ba_design_t remains unchanged. */
+typedef struct {uint8_t source[16];int8_t tune[16];uint16_t locks,magic;} ba_kit_t;
+#define BA_KIT_MAGIC 0x4b39u
+static void ba_kit_get(const ba_design_t *d,ba_kit_t *k) {
+    memset(k,0,sizeof *k);k->magic=BA_KIT_MAGIC;
+    for(unsigned j=0;j<16;j++)k->source[j]=(uint8_t)j;
+    if(d->rsv[2]!=0x39)return;
+    memcpy(k->source,d->to,32);k->locks=(uint16_t)(d->rsv[0]|d->rsv[1]<<8);
+    for(unsigned j=0;j<16;j++){if(k->source[j]>=PULSE_N || PULSE_ROLE[k->source[j]]!=j)k->source[j]=(uint8_t)j;k->tune[j]=(int8_t)clampi(k->tune[j],-24,24);}
+}
+static void ba_kit_put(ba_design_t *d,const ba_kit_t *k) {
+    if(k->magic!=BA_KIT_MAGIC){d->rsv[2]=0;return;}
+    memcpy(d->to,k->source,32);d->rsv[0]=(uint8_t)k->locks;d->rsv[1]=(uint8_t)(k->locks>>8);d->rsv[2]=0x39;
+    ba_kit_t clean;ba_kit_get(d,&clean);memcpy(d->to,clean.source,32);
+}
+static unsigned ba_source(const ba_design_t *d,unsigned pad) {
+    unsigned n=d->rsv[2]==0x39?((const uint8_t*)d->to)[pad]:pad;
+    return n<PULSE_N && PULSE_ROLE[n]==pad?n:pad;
+}
+static int ba_tune(const ba_design_t *d,unsigned pad) {return d->rsv[2]==0x39?clampi(((const int8_t*)d->to)[16+pad],-24,24):0;}
+static unsigned ba_next_source(unsigned pad,unsigned old,int step) {
+    for(unsigned j=0;j<PULSE_N;j++){old=(old+PULSE_N+(step>0?1:-1))%PULSE_N;if(PULSE_ROLE[old]==pad)return old;}
+    return pad;
+}
+static void ba_kit_random(ba_kit_t *k,uint32_t seed,int only) {
+    rnd_t r;rnd_seed(&r,seed);
+    for(unsigned j=0;j<16;j++)if(!(k->locks&(1u<<j)) && (only<0 || (unsigned)only==j)) {
+        unsigned count=0;for(unsigned a=0;a<PULSE_N;a++)if(PULSE_ROLE[a]==j)count+=PULSE_FAMILY[a]==1 || PULSE_FAMILY[a]==2?4:1;
+        unsigned pick=rnd_below(&r,count);
+        for(unsigned a=0;a<PULSE_N;a++)if(PULSE_ROLE[a]==j){unsigned weight=PULSE_FAMILY[a]==1 || PULSE_FAMILY[a]==2?4:1;if(pick<weight){k->source[j]=(uint8_t)a;break;}pick-=weight;}
+    }
+}
 typedef struct {
     uint8_t live, gate, hold, slot;
+    uint8_t source; int8_t tune; uint16_t reserved;
     int8_t mac[4];
     uint32_t pos, inc, age, choke, body;
     int32_t env, lp, damp, dc, last, blend, spectral;
@@ -14,8 +47,10 @@ static void ba_note_on(ba_voice_t *v,const ba_design_t *d,int32_t note,int32_t v
 {
     (void)velocity;(void)fresh;
     int8_t mac[4];memcpy(mac,v->mac,4);memset(v,0,sizeof *v);memcpy(v->mac,mac,4);
-    v->slot=(uint8_t)((note-48)&15); v->live=v->gate=1;
+    v->slot=(uint8_t)((note-48)&15);v->source=(uint8_t)ba_source(d,v->slot);v->tune=(int8_t)ba_tune(d,v->slot); v->live=v->gate=1;
     v->env=v->spectral=Q15; v->inc=(uint32_t)d->fm1r;
+    if(PULSE_RATE[v->source]==11025)v->inc>>=1;
+    if(v->tune)v->inc=(uint32_t)(((uint64_t)v->inc*exp2_q16((int32_t)v->tune*65536/12))>>16);
 }
 static void ba_note_off(ba_voice_t *v,const ba_design_t *d){(void)d;v->gate=0;}
 /* Linear interpolation, including a silent guard at the end. */
@@ -26,22 +61,10 @@ static int32_t ba_pcm(uint32_t start,uint32_t len,uint32_t pos)
     int32_t a=PULSE_PCM[start+p]*128,b=PULSE_PCM[start+p+1]*128;
     return a+(int32_t)(((int64_t)(b-a)*(pos&65535))>>16);
 }
-/* Two overlapping triangular grains: no hard wrap or repeated attack.
- * Power-of-two windows keep the audio loop free of division. */
-static int32_t ba_body(uint32_t start,uint32_t len,uint32_t phase,uint32_t span)
-{
-    uint32_t mask=(span<<16)-1, half=span<<15;
-    uint32_t a=phase&mask,b=(a+half)&mask;
-    int32_t wa=(int32_t)(a<half?a:((span<<16)-a));
-    wa>>=span==512?9:8; /* Q16 triangle, peak 32768 */
-    uint32_t offset=(len/16)<<16;
-    return mulq15(ba_pcm(start,len,offset+a),wa)+mulq15(ba_pcm(start,len,offset+b),Q15-wa);
-}
 static int ba_render(ba_voice_t *v,const ba_design_t *d,int32_t *out,uint32_t n)
 {
     if(!v->live)return 0;
-    uint32_t start=PULSE_OFF[v->slot],len=PULSE_OFF[v->slot+1]-start;
-    uint32_t span=len>=1100?512:256;
+    uint32_t start=PULSE_OFF[v->source],len=PULSE_OFF[v->source+1]-start;
     int32_t structure=clampi(64+v->mac[0],0,128);
     int32_t bright=clampi(d->shape+v->mac[2]*420,700,32700);
     int32_t damping=clampi(64+v->mac[1],0,128);
@@ -50,14 +73,8 @@ static int ba_render(ba_voice_t *v,const ba_design_t *d,int32_t *out,uint32_t n)
     uint32_t tap=(uint32_t)(8+amount*2)<<16;
     for(uint32_t i=0;i<n;i++) {
         int32_t x=ba_pcm(start,len,v->pos);
-        if(v->hold) {
-            int32_t body=ba_body(start,len,v->body,span);
-            /* Become a continuous body within ~23 ms, independent of playback pitch. */
-            if(v->blend<Q15)v->blend=clampi(v->blend+32,0,Q15);
-            x+=mulq15(body-x,v->blend);
-        }
         if(amount) {
-            int32_t y=v->hold?ba_body(start,len,v->body+tap,span):ba_pcm(start,len,v->pos+tap);
+            int32_t y=ba_pcm(start,len,v->pos+tap);
             x=(x*128+(position<0?-y:y)*amount)/(128+amount);
         }
         /* Odd, symmetric folding: soft sine-like body -> rich folded overtones. */
@@ -73,31 +90,41 @@ static int ba_render(ba_voice_t *v,const ba_design_t *d,int32_t *out,uint32_t n)
         x=v->damp;
         /* Remove DC from asymmetric PCM regions / comb processing. */
         v->dc=x-v->last+mulq15(v->dc,32740);v->last=x;x=v->dc;
-        if(!v->hold)x=mulq15(x,v->env);
+        x=mulq15(x,v->env); /* identical native decay with or without track ADSR */
         if(v->choke) {x=x*(int32_t)v->choke/128;if(!--v->choke)v->live=0;}
         out[i]=v->live?mulq12(clampi(x,-24000,24000),d->out):0;
         if(v->pos<(len<<16))v->pos+=v->inc;
-        v->body=(v->body+v->inc)&((span<<16)-1);v->age++;
-        if(!v->hold) {
-            v->env-=v->env/(clampi(d->decay,50,1400)*22)+1;
-            if(v->env<=2 || (v->pos>>16)>=len)v->live=0;
-        }
+        v->age++;
+        v->env-=v->env/(clampi(d->decay,50,1400)*22)+1;
+        if(v->env<=2 || (v->pos>>16)>=len)v->live=0; /* held pads never repeat a PCM fragment */
     }
     return 1;
 }
 static __typeof__(&ba_render) volatile ba_render_fp=ba_render;
 static void ba_design(ba_design_t *d,int32_t kind,uint32_t seed,uint32_t path,uint32_t gen)
 {
-    rnd_t r; rnd_seed(&r,seed^0x50554c53u);uint32_t drawn=rnd_below(&r,6);
-    memset(d,0,sizeof *d);d->kind=kind<0||kind>=6?drawn:(uint8_t)kind;
+    rnd_t r; rnd_seed(&r,seed^0x50554c53u);uint32_t drawn=rnd_below(&r,BK_N);
+    memset(d,0,sizeof *d);d->kind=kind<0||kind>=BK_N?drawn:(uint8_t)kind;
     d->seed=seed;d->path=path;d->gen=gen;
     static const int32_t tone[6]={26000,32000,14000,10000,28000,22000};
     static const int32_t rate[6]={32768,38000,29000,25000,44000,31000};
-    d->shape=clampi(tone[d->kind]+rnd_in(&r,-1200,1200),1800,32700);
-    d->fm1r=rate[d->kind]+rnd_in(&r,-800,800);
+    d->shape=clampi(tone[d->kind%6]+rnd_in(&r,-1200,1200),1800,32700);
+    d->fm1r=rate[d->kind%6]+rnd_in(&r,-800,800);
     d->folds=(d->kind==2?35:d->kind==4?60:0)+rnd_in(&r,0,8);
     d->drive=d->kind==4?5000:4096;
     d->decay=550+rnd_in(&r,-80,80);d->attack=1;d->out=3072;
+    if(d->kind>=6) {
+        ba_kit_t kit;ba_kit_get(d,&kit);d->shape=30000;d->fm1r=32768;
+        static const uint8_t hybrid[5][16]={
+            {1,1,3,2,2,2,3,1,1,0,1,2,1,1,4,0},
+            {2,2,2,2,1,2,2,2,1,0,2,2,1,1,1,0},
+            {1,1,3,3,2,2,3,1,1,0,1,2,1,1,1,0},
+            {1,1,2,1,2,2,2,4,1,0,4,2,1,4,4,0},
+            {1,2,1,2,1,2,1,2,1,0,1,2,1,4,1,0}};
+        for(unsigned j=0;j<16;j++)kit.source[j]=PULSE_MAP[d->kind<8?d->kind-5:hybrid[d->kind-8][j]][j];
+        if(d->kind==12)ba_kit_random(&kit,seed,-1);
+        ba_kit_put(d,&kit);
+    }
 }
 static const char *ba_mac_name(const ba_design_t *d,uint32_t j)
 {(void)d;static const char *const names[4]={"STRUCTURE","DAMPING","BRIGHTNESS","POSITION"};return names[j&3];}

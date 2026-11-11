@@ -12,18 +12,21 @@ or try the complete instrument in your browser.
 
 ![DROPLETS, actual RC7 firmware screen](docs/card.png)
 
-## Current prerelease: 1.0 RC8 — Effects / PRISM
+## Current prerelease: 1.0 RC9 — Hybrid kits
 
-19 new modulation destinations, eight controls each for delay/reverb/grains,
-six reverb characters, five delay characters, dotted/triplet/hybrid repeats,
-and PRISM granular processing with pitch, reverse probability and freeze.
-Loop quantization retains individual gates across overlapping notes and adds
-a mixed straight/triplet grid. [Controls, limits and validation](docs/RC8.md).
+RYUJI: 48 original percussion sources, focused on 808/909 with LM and 727 accents,
+editable hybrid kits, per-pad tuning and randomization with locks. RYUJI ADSR
+shapes the one-shot without adding a periodic sustain tone. PLAY ALONG
+keeps its guide while selecting other tracks. Four-pole filter options and
+stronger manual resonance. Includes all RC8 effects, PRISM and gate fixes.
+[Controls, sources and validation](docs/RC9.md).
 
-The public and local simulators run RC8. Session format 32772 reads RC7 sessions.
-Build with `sh tests/fx_clock.sh` inside the host container. The local package
-is `release/bocjuhn-1.0-rc8/bocjuhn-1.0-rc8.fwsc`.
-**RC8 hardware validation is pending.** [Download RC8](https://github.com/IanP06/bocjuhn/releases/tag/v1.0.0-rc8).
+The public and local simulators run RC9. Session format 32774 reads RC7/RC8.
+Build with `sh tests/ryuji_kits.sh` inside the host container. Package:
+`release/bocjuhn-1.0-rc9/bocjuhn-1.0-rc9.fwsc`.
+**RC9 hardware validation is pending.** [Download RC9](https://github.com/IanP06/bocjuhn/releases/tag/v1.0.0-rc9).
+
+[Previous RC8 effects release](docs/RC8.md).
 
 ## Previous release: 1.0 RC7 — Living instruments
 
@@ -79,8 +82,8 @@ docker run --rm -v "$PWD:/work" bocjuhn-host sh tests/fx_clock.sh
 
 The test/build script expects the 20260730.1 toolchain under build/deps/jieli;
 set JIELI_TOOLCHAIN in the script if using a different installation. The release
-builder is tools/build_fx_release.py; output is build/rc8. Build metadata
-hashes the firmware and generated headers. Product FM-1_197100, version B108.
+builder is tools/build_filter_release.py; output is build/rc9. Build metadata
+hashes the firmware and generated headers. Product FM-1_197100, version B109.
 The .fwsc includes the existing update loader; no separate data flash is needed.
 
 ## Firmware Hub
