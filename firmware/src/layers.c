@@ -548,7 +548,10 @@ static void ev_post(uint32_t type, uint32_t layer, uint32_t note, uint32_t val) 
 }
 
 /* ------------------------------------------------------- the voices --- */
-static int8_t flt_edit[NLAYER][2]; /* type DJ/LP/HP/BP; resonance 0=AUTO, 1..101 */
+static svf_t flt_second[NLAYER] POOL;
+static svf_c flt_second_coef[NLAYER] POOL;
+static uint8_t flt_last_type[NLAYER];
+static int8_t flt_edit[NLAYER][2]; /* type DJ/LP12/HP12/BP12/LP24/HP24/BP24; resonance 0=AUTO, 1..101 */
 static uint32_t lay_age;
 static void voice_on(uint32_t l, uint32_t k, int fresh)
 {
@@ -2381,11 +2384,12 @@ static void layer_block(uint32_t l, int32_t *mixl, int32_t *mixr, int32_t *rvin,
     }
     {   /* the DJ filter */
         int32_t v = mod_val(l, MD_FLT, lay_flt[l], -FLT_MAX, FLT_MAX), a = v < 0 ? -v : v;
-        uint32_t type = (uint32_t)clampi(flt_edit[l][0], 0, 3);
+        uint32_t type = (uint32_t)clampi(flt_edit[l][0], 0, 6);
         int32_t target = type ? 262144 + (v+FLT_MAX)*673861/(2*FLT_MAX) : flt_oct(v);
         int32_t amt1 = type ? Q15 : a >= 4 ? Q15 : a * (Q15 / 4);
         int32_t q1 = 2896 + (a >= 24 ? 13488 : a * 13488 / 24);         /* Q 0.707 .. 4, Q12 */
-        if (flt_edit[l][1]) q1 = 2896 + (clampi(flt_edit[l][1],1,101)-1)*13488/100;
+        if (flt_edit[l][1]) q1 = 2896 + (clampi(flt_edit[l][1],1,101)-1)*46256/100; /* explicit Q: .707..12 */
+        if(flt_last_type[l]!=type){memset(&flt_second[l],0,sizeof flt_second[l]);flt_last_type[l]=(uint8_t)type;y->f_cached_oct=0;}
         if (v)
             y->f_hp = (uint8_t)(v > 0);
         if (amt1 || y->f_amt) {
@@ -2394,16 +2398,21 @@ static void layer_block(uint32_t l, int32_t *mixl, int32_t *mixr, int32_t *rvin,
                 y->f_oct = type ? target : flt_oct(v ? v : (y->f_hp ? 1 : -1));
                 y->f_q = q1;
                 y->flt.ic1 = y->flt.ic2 = 0;
+                memset(&flt_second[l],0,sizeof flt_second[l]);
             }
             if (v || type)
                 y->f_oct += (target - y->f_oct) >> 2;   /* (glides: a knob's click is a step) */
             y->f_q += (q1 - y->f_q) >> 2;
             if (y->f_cached_oct != y->f_oct || y->f_cached_q != y->f_q) {
                 svf_coef(&y->f_coef, (int32_t)exp2_q16(y->f_oct - (16 << 16)), y->f_q);
+                if(type>=4)svf_coef(&flt_second_coef[l],(int32_t)exp2_q16(y->f_oct-(16<<16)),2896);
                 y->f_cached_oct = y->f_oct; y->f_cached_q = y->f_q;
             }   /* 2^oct Hz */
             for (i = 0; i < CTL; i++) {
-                int32_t f = svf_run(&y->flt, &y->f_coef, buf[i], type ? (type == 2u ? 3 : type == 3u ? 2 : 1) : y->f_hp ? 3 : 1);
+                uint32_t shape=type>=4?type-3:type;
+                int mode=shape?(shape==2?3:shape==3?2:1):y->f_hp?3:1;
+                int32_t f = svf_run(&y->flt, &y->f_coef, buf[i],mode);
+                if(type>=4)f=svf_run(&flt_second[l],&flt_second_coef[l],f,mode);
                 a0 += da;
                 buf[i] += mulq15(f - buf[i], a0);
             }
@@ -2626,6 +2635,7 @@ static void layers_init(void)
         dist[l].g = dist[l].gp = Q16;
     blk_last = blk_new = overload_skipped = 0;
     memset(flt_edit,0,sizeof flt_edit);
+    memset(flt_second,0,sizeof flt_second);memset(flt_last_type,0,sizeof flt_last_type);
     memset((void *)ev_off_lost,0,sizeof ev_off_lost);
     memset((void *)ev_off_heard,0,sizeof ev_off_heard);
     for (k = 0; k < NVOICE; k++) {

@@ -2,7 +2,7 @@
  * TONITOR: REACT, the other tracks improvising with the one played -- with SHADOW and ARPEGGIO, the PLAY ALONG page
  * (SEQ's fourth: PRESETS the mode, PLAY on or off). The chosen track is the guide (its button lit); on the page the
  * other tracks' buttons take them in or out -- in a glow, out dark; the guide's says GUIDE TRACK (it cannot follow
- * itself). Choosing another track (off the page) makes it the guide. After the SMK-37 port's react.c (its build 32).
+ * itself). The guide stays fixed while running; SHIFT + a track on this page changes it explicitly. After the SMK-37 port's react.c (its build 32).
  *
  * After the systems that do this well -- Pachet's Continuator, IRCAM's OMax and Somax, Lewis's Voyager:
  *
@@ -696,8 +696,9 @@ static void rx_reset(void)                          /* nothing heard yet (on, or
     rx.vel = 96;
     rx.mid = 60;
     rx.ans_done = 1;
-    rx.guide = ui.sel;
-    rx_ear = rx.on ? ui.sel : 0xFFu;
+    if(rx.guide>=NLAYER)rx.guide=0;
+    rx_ear = rx.on ? rx.guide : 0xFFu;
+    rx_lr=rx_lw; /* discard events captured from a previous guide */
     for (l = 0; l < NLAYER; l++) {
         rx.a[l].pos = rx.a[l].echoed = RX_NONE;
         rx.a[l].mode = RM_REST;
@@ -722,6 +723,7 @@ static void rx_defaults(void)                      /* (the pages' values, the fi
 static void rx_set(int on)
 {
     rx_defaults();
+    if(on && !rx.on)rx.guide=ui.sel;
     rx.on = (uint8_t)on;
     rx_reset();
 }
@@ -1212,8 +1214,7 @@ static void rx_mode_set(uint32_t m)                 /* REACT, SHADOW or ARPEGGIO
 static void rx_tick(void)
 {
     uint32_t now = fm1_ms, i, l;
-    if (rx.on && rx.guide != ui.sel)
-        rx_reset();                                 /* (another track chosen: it leads now) */
+    if(!rx.on)rx.guide=ui.sel; /* selection chooses the next guide only while stopped */
     while (rx_lr != rx_lw) {                        /* the guide's loops' notes (the ISR's) */
         uint32_t n = rx_lq[rx_lr % 16u][0], v = rx_lq[rx_lr % 16u][1];
         RING_PUBLISH();
@@ -1324,7 +1325,7 @@ static void rx_pad_hit(uint32_t j)
     static char m[24];
     if (j >= NLAYER)
         return;
-    if (j == ui.sel) {
+    if (j == (rx.on?rx.guide:ui.sel)) {
         rx.red_until = fm1_ms + 1200u;
         say("GUIDE TRACK", 1200);
         return;

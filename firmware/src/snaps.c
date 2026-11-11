@@ -83,6 +83,7 @@ static int8_t snap_gr[NSNAP][NLAYER][4], morph_gr[NLAYER][4];
 static uint8_t snap_art[NSNAP][NLAYER][2][BL_MAX] POOL;
 static clock_config snap_clock[NSNAP] POOL;
 static fx_config snap_fx[NSNAP] POOL;
+static uint8_t snap_rxguide[NSNAP], morph_rxguide;
 static int16_t snap_acid[NSNAP][NLAYER][4] POOL;
 static int8_t snap_filter[NSNAP][NLAYER][2], morph_filter[NLAYER][2];
 static snd_ent_t snd_tab[SND_N];
@@ -596,6 +597,7 @@ static void snap_discrete(const snap_t *b, uint32_t mask)
                                                   * (after: rx_set gives empty pages their first values) */
     if (rx.on != b->rx_on)
         rx_set(b->rx_on);
+    if(rx.guide!=morph_rxguide){rx.guide=morph_rxguide;rx_reset();}
     rx.mask = b->rx_mask;
     memcpy(rx.k, b->rx_k, 4u);
     memcpy(rx.sk, b->rx_sk, 4u);
@@ -798,6 +800,7 @@ static int snap_store(uint32_t i)
     memcpy(snap_gr[i], gr_edit, sizeof gr_edit);
     memcpy(snap_filter[i], flt_edit, sizeof flt_edit);
     for(uint32_t l=0;l<NLAYER;l++){memcpy(snap_art[i][l][0],bl_accent[l],BL_MAX);memcpy(snap_art[i][l][1],bl_slide[l],BL_MAX);}
+    snap_rxguide[i]=rx.on?rx.guide:ui.sel;
     snap_fx[i]=fx;
     snap_clock[i]=clk;memcpy(snap_acid[i],acid_edit,sizeof acid_edit);
     for (uint32_t l = 0; l < NLAYER; l++) {
@@ -818,6 +821,7 @@ static void snap_recall(uint32_t i, uint32_t morph_half_s)
         return;
     morph_end();
     for(uint32_t l=0;l<NLAYER;l++){memcpy(bl_accent[l],snap_art[i][l][0],BL_MAX);memcpy(bl_slide[l],snap_art[i][l][1],BL_MAX);}
+    morph_rxguide=snap_rxguide[i]<NLAYER?snap_rxguide[i]:ui.sel;
     fx=snap_fx[i];fx_sanitize(&fx);
     clk=snap_clock[i];clock_sanitize(&clk);memcpy(acid_edit,snap_acid[i],sizeof acid_edit);
     for(uint32_t l=0;l<NLAYER;l++)for(uint32_t k=0;k<4;k++)acid_edit[l][k]=(int16_t)clampi(acid_edit[l][k],0,k==0?2:k==2?500:100);
@@ -872,7 +876,7 @@ static void snap_reset(void)
     memset(snap_gr, 0, sizeof snap_gr);
     memset(snap_art,0,sizeof snap_art);
     memset(snap_filter, 0, sizeof snap_filter);
-    for(uint32_t i=0;i<NSNAP;i++){snap_fx[i]=fx;snap_clock[i]=clk;memcpy(snap_acid[i],acid_edit,sizeof acid_edit);}
+    for(uint32_t i=0;i<NSNAP;i++){snap_rxguide[i]=rx.on?rx.guide:ui.sel;snap_fx[i]=fx;snap_clock[i]=clk;memcpy(snap_acid[i],acid_edit,sizeof acid_edit);}
     memset(snap_pend, 0, sizeof snap_pend);
     snap.used = 0;
     snap.cur = -1;

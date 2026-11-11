@@ -6951,7 +6951,7 @@ static void pa_run(uint32_t ms)
         for (i = 0; i < RX_Q; i++) {
             if (rx.q[i].on == 2u && pa_prev[i] != 2u) {
                 pa_seen[rx.q[i].layer]++;
-                pa_bad += rx.q[i].layer == ui.sel || !((m >> (rx.q[i].note % 12u)) & 1u);
+                pa_bad += rx.q[i].layer == rx.guide || !((m >> (rx.q[i].note % 12u)) & 1u);
             }
             pa_prev[i] = rx.q[i].on;
         }

@@ -65,7 +65,7 @@ int main(void) {
     assert(ses_load_slot(22)==SES_OK && !memcmp(&saved,&fx,sizeof fx));
     unsigned base=SES_LO+ses.sect[ses_find(22)]*SES_SECT;
     ses_head_t old;memcpy(&old,host_flash+base,sizeof old);
-    old.format=32771;old.len-=2*sizeof(fx_config); /* current + one snapshot */
+    old.format=32771;old.len-=2*sizeof(fx_config)+1+sizeof snap_rxguide; /* current + one snapshot */
     old.body_crc=ses_crc(host_flash+base+sizeof old,old.len-sizeof old,0);
     old.head_crc=ses_crc((const uint8_t *)&old,30,0);memcpy(host_flash+base,&old,sizeof old);
     assert(ses_load_slot(22)==SES_OK);

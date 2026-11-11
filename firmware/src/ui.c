@@ -836,8 +836,12 @@ static void ui_input(void)
         ui.vary_shown = 0;                       /* (VARY taken by the ISR: shown from the looper again) */
     (void)rel;
     for (l = 0; l < NLAYER; l++)
-        if (btn_bit(press, LAYER_BTN[l]) && rx_page_up())
-            rx_pad_hit(l);                       /* (the PLAY ALONG page: the track in or out; the guide stays) */
+        if (btn_bit(press, LAYER_BTN[l]) && rx_page_up()) {
+            if((fm1_in.notes>>KEY_SHIFT)&1u) {
+                ui.sel=(uint8_t)l;rx.guide=(uint8_t)l;rx.mask&=(uint8_t)~(1u<<l);
+                rx_reset();say("GUIDE CHANGED",1200);ui.force=1;
+            } else rx_pad_hit(l);
+        }                       /* (the PLAY ALONG page: the track in or out; the guide stays) */
         else if (btn_bit(press, LAYER_BTN[l])) {
             ui.trk_down = (uint8_t)(l + 1u);
             ui.trk_t0 = fm1_ms;
@@ -1028,7 +1032,7 @@ static void ui_input(void)
             ui.force=1;
         }
         if ((s=enc_take(EN_K2))) { flt_edit[ui.sel][1]=(int8_t)clampi(flt_edit[ui.sel][1]+s,0,101); ui.force=1; }
-        if ((s=enc_take(EN_K3))) { flt_edit[ui.sel][0]=(int8_t)clampi(flt_edit[ui.sel][0]+s,0,3); ui.force=1; }
+        if ((s=enc_take(EN_K3))) { flt_edit[ui.sel][0]=(int8_t)clampi(flt_edit[ui.sel][0]+s,0,6); ui.force=1; }
         enc_take(EN_K4);
     } else if (ui.gr_page) {
         static const uint8_t K[4] = {EN_K1, EN_K2, EN_K3, EN_K4};
@@ -1681,9 +1685,9 @@ static void ui_leds(void)
 {
     uint32_t l, k;
     for (l = 0; l < NLAYER; l++) {
-        fm1_led_key(PANEL_BTN[LAYER_BTN[l]], clip_from() == (int)l ? (fm1_ms / 250u) & 1u : l == ui.sel);   /* (on the
+        fm1_led_key(PANEL_BTN[LAYER_BTN[l]], clip_from() == (int)l ? (fm1_ms / 250u) & 1u : l == (rx_page_up() && rx.on?rx.guide:ui.sel));   /* (on the
                                                                                                          * clipboard: it blinks) */
-        led_dim_key(PANEL_BTN[LAYER_BTN[l]], rx_page_up() ? l != ui.sel && (rx.mask >> l & 1u) : layer_sounding(l));   /* the others glow
+        led_dim_key(PANEL_BTN[LAYER_BTN[l]], rx_page_up() ? l != (rx.on?rx.guide:ui.sel) && (rx.mask >> l & 1u) : layer_sounding(l));   /* the others glow
                                                                                      * while they sound; on the PLAY ALONG
                                                                                      * page, while they follow the guide */
     }
@@ -2763,7 +2767,7 @@ static void ui_draw(void)
         return;
     }
     if (ui.filter_page) {
-        static const char *const type[4]={"DJ", "LOW PASS", "HIGH PASS", "BAND PASS"};
+        static const char *const type[7]={"DJ", "LP 12", "HP 12", "BP 12", "LP 24", "HP 24", "BP 24"};
         if (ui.force || ui.shown_page != 18) {
             CV_AREA(0,0,240,240,C_BLACK) {
                 char n[16]; uint32_t l=ui.sel;
