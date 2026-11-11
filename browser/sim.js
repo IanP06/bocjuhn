@@ -71,7 +71,7 @@ async function power() {
     context=new AudioContext({sampleRate:44100,latencyHint:'interactive'});
     await context.resume();
     await dbReady;
-    worker=new Worker(ROOT+'engine-worker.js?v=rc9-kits',{type:'module'});
+    worker=new Worker(ROOT+'engine-worker.js?v=rc10-hybrid',{type:'module'});
     await new Promise((resolve,reject)=>{
       worker.onerror=error=>{ status('Engine error — reload to retry'); console.error(error); reject(error); };
       worker.onmessage=({data:d})=>{
@@ -170,7 +170,7 @@ $('shiftLatch').onclick=()=>{if(!powered)return;shiftLocked=!shiftLocked;$('shif
 $('screenZoom').onclick=()=>{$('zoomPanel').hidden=!$('zoomPanel').hidden;$('screenZoom').setAttribute('aria-pressed',!$('zoomPanel').hidden);};
 $('helpToggle').onclick=()=>{$('panelHelp').hidden=!$('panelHelp').hidden;$('helpToggle').setAttribute('aria-expanded',!$('panelHelp').hidden);};
 const signature='TONITOR-INTERVAL-WEB-V2\n';
-$('export').onclick=async()=>{await dbReady;const flash=memory||new Uint8Array(0x100000).fill(255);const url=URL.createObjectURL(new Blob([signature,flash],{type:'application/octet-stream'}));const a=document.createElement('a');a.href=url;a.download='bocjuhn-rc9-memory.bin';a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);};
+$('export').onclick=async()=>{await dbReady;const flash=memory||new Uint8Array(0x100000).fill(255);const url=URL.createObjectURL(new Blob([signature,flash],{type:'application/octet-stream'}));const a=document.createElement('a');a.href=url;a.download='bocjuhn-rc10-memory.bin';a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);};
 $('import').onchange=async e=>{
   const file=e.target.files[0];if(!file)return;
   const bytes=new Uint8Array(await file.arrayBuffer()),header=new TextEncoder().encode(signature);

@@ -1,0 +1,254 @@
+{
+  "codec": [
+    {
+      "file": "808-clap.wav",
+      "rate": 22050,
+      "samples": 15862,
+      "companding_snr_db": 37.57
+    },
+    {
+      "file": "808-claves.wav",
+      "rate": 22050,
+      "samples": 1055,
+      "companding_snr_db": 37.55
+    },
+    {
+      "file": "808-cowbell.wav",
+      "rate": 22050,
+      "samples": 9351,
+      "companding_snr_db": 37.99
+    },
+    {
+      "file": "808-cymbal.wav",
+      "rate": 32000,
+      "samples": 61389,
+      "companding_snr_db": 37.14
+    },
+    {
+      "file": "808-hat.wav",
+      "rate": 44100,
+      "samples": 4034,
+      "companding_snr_db": 36.87
+    },
+    {
+      "file": "808-maracas.wav",
+      "rate": 44100,
+      "samples": 1957,
+      "companding_snr_db": 37.38
+    },
+    {
+      "file": "808-open.wav",
+      "rate": 44100,
+      "samples": 15982,
+      "companding_snr_db": 37.41
+    },
+    {
+      "file": "808-rim.wav",
+      "rate": 22050,
+      "samples": 603,
+      "companding_snr_db": 37.57
+    },
+    {
+      "file": "808-snare.wav",
+      "rate": 44100,
+      "samples": 7378,
+      "companding_snr_db": 37.62
+    },
+    {
+      "file": "909-crash.wav",
+      "rate": 44100,
+      "samples": 43069,
+      "companding_snr_db": 37.37
+    },
+    {
+      "file": "909-hat.wav",
+      "rate": 44100,
+      "samples": 3748,
+      "companding_snr_db": 37.19
+    },
+    {
+      "file": "909-open.wav",
+      "rate": 44100,
+      "samples": 19002,
+      "companding_snr_db": 37.25
+    },
+    {
+      "file": "909-ride.wav",
+      "rate": 44100,
+      "samples": 46815,
+      "companding_snr_db": 37.38
+    }
+  ],
+  "engine": [
+    {
+      "family": 808,
+      "instrument": "kick",
+      "peak": 0.395721435546875,
+      "t95_ms": 252.0,
+      "centroid_hz": 52.5
+    },
+    {
+      "family": 808,
+      "instrument": "snare",
+      "peak": 0.477447509765625,
+      "t95_ms": 50.6,
+      "centroid_hz": 4755.7
+    },
+    {
+      "family": 808,
+      "instrument": "clap",
+      "peak": 0.477447509765625,
+      "t95_ms": 64.6,
+      "centroid_hz": 2027.9
+    },
+    {
+      "family": 808,
+      "instrument": "closed hat",
+      "peak": 0.477447509765625,
+      "t95_ms": 27.2,
+      "centroid_hz": 11079.6
+    },
+    {
+      "family": 808,
+      "instrument": "open hat",
+      "peak": 0.477447509765625,
+      "t95_ms": 270.5,
+      "centroid_hz": 8026.2
+    },
+    {
+      "family": 808,
+      "instrument": "cowbell",
+      "peak": 0.477447509765625,
+      "t95_ms": 87.1,
+      "centroid_hz": 862.7
+    },
+    {
+      "family": 808,
+      "instrument": "cymbal",
+      "peak": 0.33868408203125,
+      "t95_ms": 599.6,
+      "centroid_hz": 6604.9
+    },
+    {
+      "family": 909,
+      "instrument": "kick",
+      "peak": 0.444580078125,
+      "t95_ms": 186.1,
+      "centroid_hz": 59.0
+    },
+    {
+      "family": 909,
+      "instrument": "snare",
+      "peak": 0.54931640625,
+      "t95_ms": 65.4,
+      "centroid_hz": 5571.0
+    },
+    {
+      "family": 909,
+      "instrument": "clap",
+      "peak": 0.228729248046875,
+      "t95_ms": 46.3,
+      "centroid_hz": 2091.5
+    },
+    {
+      "family": 909,
+      "instrument": "closed hat",
+      "peak": 0.477447509765625,
+      "t95_ms": 33.9,
+      "centroid_hz": 6720.8
+    },
+    {
+      "family": 909,
+      "instrument": "open hat",
+      "peak": 0.477447509765625,
+      "t95_ms": 152.7,
+      "centroid_hz": 6714.8
+    },
+    {
+      "family": 909,
+      "instrument": "ride",
+      "peak": 0.477447509765625,
+      "t95_ms": 539.6,
+      "centroid_hz": 5756.0
+    },
+    {
+      "family": 909,
+      "instrument": "crash",
+      "peak": 0.477447509765625,
+      "t95_ms": 548.8,
+      "centroid_hz": 5998.8
+    }
+  ],
+  "timeline": [
+    {
+      "seconds": 0,
+      "family": 1,
+      "instrument": "kick"
+    },
+    {
+      "seconds": 2.2498185941043083,
+      "family": 1,
+      "instrument": "snare"
+    },
+    {
+      "seconds": 4.499637188208617,
+      "family": 1,
+      "instrument": "clap"
+    },
+    {
+      "seconds": 6.749455782312925,
+      "family": 1,
+      "instrument": "closed hat"
+    },
+    {
+      "seconds": 8.999274376417233,
+      "family": 1,
+      "instrument": "open hat"
+    },
+    {
+      "seconds": 11.249092970521541,
+      "family": 1,
+      "instrument": "cowbell"
+    },
+    {
+      "seconds": 13.49891156462585,
+      "family": 1,
+      "instrument": "cymbal"
+    },
+    {
+      "seconds": 15.748730158730158,
+      "family": 2,
+      "instrument": "kick"
+    },
+    {
+      "seconds": 17.998548752834466,
+      "family": 2,
+      "instrument": "snare"
+    },
+    {
+      "seconds": 20.248367346938775,
+      "family": 2,
+      "instrument": "clap"
+    },
+    {
+      "seconds": 22.498185941043083,
+      "family": 2,
+      "instrument": "closed hat"
+    },
+    {
+      "seconds": 24.74800453514739,
+      "family": 2,
+      "instrument": "open hat"
+    },
+    {
+      "seconds": 26.9978231292517,
+      "family": 2,
+      "instrument": "ride"
+    },
+    {
+      "seconds": 29.247641723356008,
+      "family": 2,
+      "instrument": "crash"
+    }
+  ]
+}

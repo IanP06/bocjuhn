@@ -1,7 +1,8 @@
-"""Original deterministic percussion, rendered offline into signed 8-bit PCM at 22050 Hz.
-No external recordings. Runs only while building; device playback is integer only.
+"""Build the deterministic RYUJI hybrid bank: captured percussion + compact accents.
+Primary low drums use integer VA on device. Sample provenance lives in assets/ryuji.
+Build uses only the Python standard library; playback uses a companding LUT.
 """
-import math, random
+import math, random, wave, struct, json
 from pathlib import Path
 SR=22050
 NAMES=['KICK','SUB','SNARE','CLAP','HAT','OPEN HAT','RIM','TOM','CLICK','ZAP','METAL','SHARD','NOISE','BLOP','TICK','CRUNCH']
@@ -89,22 +90,57 @@ def classic(f,k,sr,n):
     mean=sum(out)/n;out=[(v-mean)*min(1,i/6,(n-1-i)/48) for i,v in enumerate(out)];peak=max(map(abs,out)) or 1
     return [max(-120,min(120,round(v/peak*112))) for v in out]
 
+# Source IDs and pad roles stay stable for saved kits. VA owns the low-frequency
+# resonators; captured metallic/noisy transients use companded PCM with a LUT.
+CAPTURES={(1,2):'808-snare',(1,3):'808-clap',(1,4):'808-hat',(1,5):'808-open',
+          (1,6):'808-rim',(1,8):'808-claves',(1,10):'808-cowbell',(1,11):'808-cymbal',
+          (1,12):'808-maracas',(1,14):'808-maracas',(2,4):'909-hat',(2,5):'909-open',
+          (2,10):'909-ride',(2,11):'909-crash'}
+VA={(1,0):1,(1,1):1,(1,7):2,(1,13):2,
+    (2,0):1,(2,1):1,(2,2):3,(2,3):4,(2,6):5,(2,7):2}
+
+def decode_mu(u):
+    u=(~u)&255;v=(((u&15)<<3)+132) << ((u>>4)&7)
+    return 132-v if u&128 else v-132
+MU=[decode_mu(i) for i in range(256)]
+# Nearest decoded value avoids an extra bias/rounding loss during offline encode.
+SORTED=sorted((v,i) for i,v in enumerate(MU))
+def encode_mu(x):
+    import bisect
+    j=bisect.bisect_left(SORTED,(x,-1));j=min(max(j,1),255)
+    return min(SORTED[j-1:j+1],key=lambda a:abs(a[0]-x))[1]
+
 def main():
-    data=[]; offsets=[0];rates=[];roles=[];families=[];labels=[];maps=[list(range(16)) for _ in FAMILIES]
-    def add(pcm,sr,k,f,label):
-        idx=len(rates);data.extend(pcm);offsets.append(len(data));rates.append(sr);roles.append(k);families.append(f);labels.append(label);return idx
-    for k,n in enumerate(LENGTHS):add(sample(k,n),SR,k,0,NAMES[k])
+    data=[];offsets=[0];rates=[];roles=[];families=[];labels=[];models=[];maps=[list(range(16)) for _ in FAMILIES]
+    def add(pcm,sr,k,f,label,model=0):
+        idx=len(rates);data.extend(encode_mu(v) for v in pcm);offsets.append(len(data));rates.append(sr);roles.append(k);families.append(f);labels.append(label);models.append(model);return idx
+    # The secondary original bank is deliberately compact. Primary 808/909 get
+    # the bandwidth and tail budget; no new source IDs or storage layout changes.
+    for k,n in enumerate(LENGTHS):
+        pcm=sample(k,n);pcm=pcm[::2][:1654]
+        for j in range(min(64,len(pcm))):pcm[-1-j]=round(pcm[-1-j]*j/64)
+        add([v*128 for v in pcm],11025,k,0,NAMES[k])
     for f,voices in VOICES.items():
         for k,label in voices.items():
-            sr=22050 if f in (1,2) or k in (4,5,11,12,14) else 11025
-            seconds=(.55 if k in (0,1) else .65 if k==11 else .35 if k==5 else .25 if k in (2,3,7,10,13) else .09) if f in (1,2) else (.22 if k in (0,2,3,7,10,13) else .09)
-            maps[f][k]=add(classic(f,k,sr,int(sr*seconds)),sr,k,f,label)
-    out=['/* Generated original synthesis; inspired families, not sampled ROMs or circuit emulations. GPL-3.0-only. */', '#define PULSE_N '+str(len(rates)), '#define PULSE_FAMILIES 5']
+            model=VA.get((f,k),0)
+            if model: pcm=[0,0];sr=22050
+            elif (f,k) in CAPTURES:
+                path=Path('assets/ryuji')/(CAPTURES[f,k]+'.wav')
+                with wave.open(str(path),'rb') as w:
+                    assert w.getnchannels()==1 and w.getsampwidth()==2
+                    sr=w.getframerate();pcm=list(struct.unpack('<'+'h'*w.getnframes(),w.readframes(w.getnframes())))
+            else:
+                sr=11025;seconds=.16 if k in (0,2,3,7,10,13) else .07
+                pcm=[v*128 for v in classic(f,k,sr,int(sr*seconds))]
+            assert len(pcm)<65535
+            maps[f][k]=add(pcm,sr,k,f,label,model)
+    out=['/* Generated RYUJI hybrid bank. Captures: assets/ryuji/manifest.json. */','#define PULSE_N '+str(len(rates)), '#define PULSE_FAMILIES 5']
     def arr(typ,name,vals):out.append('static const '+typ+' '+name+'['+str(len(vals))+'] = {'+','.join(map(str,vals))+'};')
-    arr('uint32_t','PULSE_OFF',offsets);arr('uint16_t','PULSE_RATE',rates);arr('uint8_t','PULSE_ROLE',roles);arr('uint8_t','PULSE_FAMILY',families)
+    arr('uint32_t','PULSE_OFF',offsets);arr('uint16_t','PULSE_RATE',rates);arr('uint8_t','PULSE_ROLE',roles);arr('uint8_t','PULSE_FAMILY',families);arr('uint8_t','PULSE_MODEL',models)
+    arr('int16_t','PULSE_MU',MU)
     arr('char *const','PULSE_NAME',['"'+v+'"' for v in NAMES]);arr('char *const','PULSE_LABEL',['"'+v+'"' for v in labels]);arr('char *const','PULSE_FAMILY_NAME',['"'+v+'"' for v in FAMILIES])
     out.append('static const uint8_t PULSE_MAP[5][16] = {'+','.join('{'+','.join(map(str,row))+'}' for row in maps)+'};')
-    out.append('static const int8_t PULSE_PCM['+str(len(data))+'] = {');out += [','.join(map(str,data[i:i+32]))+',' for i in range(0,len(data),32)];out+=['};']
+    out.append('static const uint8_t PULSE_PCM['+str(len(data))+'] = {');out += [','.join(map(str,data[i:i+32]))+',' for i in range(0,len(data),32)];out+=['};']
     Path('build/gen/pulse_pcm.h').write_text('\n'.join(out)+'\n')
-    print('RYUJI PCM:',len(data),'bytes;',len(rates),'sources;',len(FAMILIES),'families')
+    print('RYUJI hybrid:',len(data),'bytes;',sum(bool(x) for x in models),'VA sources;',len(rates),'total sources')
 if __name__=='__main__':main()

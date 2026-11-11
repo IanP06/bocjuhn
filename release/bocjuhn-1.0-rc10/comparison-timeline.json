@@ -1,0 +1,82 @@
+[
+  {
+    "seconds": 0,
+    "instrument": "808 kick",
+    "version": "RC9"
+  },
+  {
+    "seconds": 2.25,
+    "instrument": "808 kick",
+    "version": "RC10"
+  },
+  {
+    "seconds": 4.5,
+    "instrument": "808 snare",
+    "version": "RC9"
+  },
+  {
+    "seconds": 6.75,
+    "instrument": "808 snare",
+    "version": "RC10"
+  },
+  {
+    "seconds": 9.0,
+    "instrument": "808 open hat",
+    "version": "RC9"
+  },
+  {
+    "seconds": 11.25,
+    "instrument": "808 open hat",
+    "version": "RC10"
+  },
+  {
+    "seconds": 13.5,
+    "instrument": "808 cymbal",
+    "version": "RC9"
+  },
+  {
+    "seconds": 15.75,
+    "instrument": "808 cymbal",
+    "version": "RC10"
+  },
+  {
+    "seconds": 18.0,
+    "instrument": "909 kick",
+    "version": "RC9"
+  },
+  {
+    "seconds": 20.25,
+    "instrument": "909 kick",
+    "version": "RC10"
+  },
+  {
+    "seconds": 22.5,
+    "instrument": "909 snare",
+    "version": "RC9"
+  },
+  {
+    "seconds": 24.75,
+    "instrument": "909 snare",
+    "version": "RC10"
+  },
+  {
+    "seconds": 27.0,
+    "instrument": "909 open hat",
+    "version": "RC9"
+  },
+  {
+    "seconds": 29.25,
+    "instrument": "909 open hat",
+    "version": "RC10"
+  },
+  {
+    "seconds": 31.5,
+    "instrument": "909 crash",
+    "version": "RC9"
+  },
+  {
+    "seconds": 33.75,
+    "instrument": "909 crash",
+    "version": "RC10"
+  }
+]

@@ -12,19 +12,21 @@ or try the complete instrument in your browser.
 
 ![DROPLETS, actual RC7 firmware screen](docs/card.png)
 
-## Current prerelease: 1.0 RC9 — Hybrid kits
+## Current prerelease: 1.0 RC10 — RYUJI VA + samples
 
-RYUJI: 48 original percussion sources, focused on 808/909 with LM and 727 accents,
-editable hybrid kits, per-pad tuning and randomization with locks. RYUJI ADSR
-shapes the one-shot without adding a periodic sustain tone. PLAY ALONG
-keeps its guide while selecting other tracks. Four-pole filter options and
-stronger manual resonance. Includes all RC8 effects, PRISM and gate fixes.
-[Controls, sources and validation](docs/RC9.md).
+RYUJI combines 10 integer VA percussion sources with 38 sampled/synthetic
+one-shots, prioritizing 808/909. Recorded percussion and metallic sources,
+clean zero-macro playback, longer tails, editable kits and random locks.
+The original/accent bank remains compact; its LM/727 sounds are synthetic.
+[Controls, sources, licensing and validation](docs/RC10.md).
 
-The public and local simulators run RC9. Session format 32774 reads RC7/RC8.
-Build with `sh tests/ryuji_kits.sh` inside the host container. Package:
-`release/bocjuhn-1.0-rc9/bocjuhn-1.0-rc9.fwsc`.
-**RC9 hardware validation is pending.** [Download RC9](https://github.com/IanP06/bocjuhn/releases/tag/v1.0.0-rc9).
+The public and local simulators run RC10. Session format 32774 reads RC7–RC9;
+existing RYUJI timbres intentionally change. Build with
+`sh tests/ryuji_hybrid.sh` inside the host container. Package:
+`release/bocjuhn-1.0-rc10/bocjuhn-1.0-rc10.fwsc`.
+**RC10 hardware validation is pending.** [Download RC10](https://github.com/IanP06/bocjuhn/releases/tag/v1.0.0-rc10).
+
+[Previous RC9 kits release](docs/RC9.md).
 
 [Previous RC8 effects release](docs/RC8.md).
 

@@ -1,0 +1,8 @@
+{
+  "existing_bank_bytes": 219828,
+  "existing_bank_seconds": 10.67437641723356,
+  "image_remaining_bytes": 58660,
+  "replacement_bank_plus_new_code_bytes": 278488,
+  "all_current_durations_pcm16_44100_bytes": 941480,
+  "pcm16_44100_seconds_before_new_code": 3.1574603174603175
+}

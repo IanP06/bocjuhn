@@ -1,0 +1,35 @@
+[
+  {
+    "instrument": "Kick",
+    "source_file": "va-0-6-2.f32",
+    "tone": 0.5,
+    "decay": 0.6000000000000001,
+    "reference_t95_ms": 242.6530612244898,
+    "prototype_t95_ms": 250.0907029478458,
+    "reference_centroid_hz": 52.813971881642516,
+    "prototype_centroid_hz": 52.32517546807074,
+    "note": "Coarse fit of envelope and spectrum, not proof of authenticity or FM1 feasibility"
+  },
+  {
+    "instrument": "Snare",
+    "source_file": "va-1-2-1.f32",
+    "tone": 0.25,
+    "decay": 0.2,
+    "reference_t95_ms": 39.70521541950114,
+    "prototype_t95_ms": 35.78231292517007,
+    "reference_centroid_hz": 5771.598845839431,
+    "prototype_centroid_hz": 4296.778874945399,
+    "note": "Coarse fit of envelope and spectrum, not proof of authenticity or FM1 feasibility"
+  },
+  {
+    "instrument": "Open hat",
+    "source_file": "va-2-8-4.f32",
+    "tone": 1.0,
+    "decay": 0.8,
+    "reference_t95_ms": 435.14739229024946,
+    "prototype_t95_ms": 290.99773242630386,
+    "reference_centroid_hz": 8469.074242910427,
+    "prototype_centroid_hz": 11806.158565419506,
+    "note": "Coarse fit of envelope and spectrum, not proof of authenticity or FM1 feasibility"
+  }
+]

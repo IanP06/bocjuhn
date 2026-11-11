@@ -2044,7 +2044,7 @@ static void voice_render(uint32_t k)
         /* Banks of 16 keep pad identity separate from octave. MIDI 48..63 is neutral. */
         int32_t oct=clampi((int32_t)(vox[k].note/16)-3+ba_register[l],-6,6);
         uint32_t rate=(uint32_t)ba_buf[l][ba_use[l]].fm1r;
-        if(PULSE_RATE[vmem[k].ba.source]==11025)rate>>=1;
+        rate=(uint32_t)(((uint64_t)rate*PULSE_RATE[vmem[k].ba.source])/22050);
         if(vmem[k].ba.tune)rate=(uint32_t)(((uint64_t)rate*exp2_q16((int32_t)vmem[k].ba.tune*65536/12))>>16);
         vmem[k].ba.inc=oct<0?rate>>(-oct):rate<<oct;
         alive = ba_render_fp(&vmem[k].ba, &ba_buf[l][ba_use[l]], vb, CTL);

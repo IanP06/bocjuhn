@@ -1,0 +1,42 @@
+RYUJI hybrid: 264054 bytes; 10 VA sources; 48 total sources
+HYBRID PASS: 38 PCM sources bypass coloration; 10 VA sources; extreme tuning/macros bounded; voice state 120 bytes
+HOST 1 pad 0: 12.82 ns/sample
+HOST 1 pad 2: 2.57 ns/sample
+HOST 1 pad 4: 2.54 ns/sample
+HOST 2 pad 0: 7.14 ns/sample
+HOST 2 pad 2: 8.90 ns/sample
+HOST 2 pad 4: 2.32 ns/sample
+RYUJI ENVELOPE PASS: all 48 sources sample-identical with hold on/off; finite tails; zero sample endpoints
+RYUJI MIXER ENVELOPE PASS: held maximum-sustain pad ends with its one-shot
+RYUJI KIT PASS: sources/tune, weighted random, locks, presets, snapshots, sessions, dormant engine, envelope identity and editor
+REACT: guide loop continues on follower and third-track selection PASS
+SHADOW: guide loop continues on follower and third-track selection PASS
+ARPEGGIO: guide loop continues on follower and third-track selection PASS
+Filter stopband: LP12 -38.13 dB, LP24 -65.88 dB; HP12 -36.16 dB, HP24 -59.11 dB; resonance Q4->Q12 9.53 dB
+Six-track full-mix cutoff sweeps, seven types at maximum resonance PASS
+Host benchmark, six tracks 2 poles: 0.053 seconds (not FM1 timing)
+Host benchmark, six tracks 4 poles: 0.077 seconds (not FM1 timing)
+Accompaniment, persisted guide, RC8 migration, filter slopes and resonance PASS
+PRISM pitch -24 energy 475585683 frozen 0 mix 100
+PRISM pitch -12 energy 407787198 frozen 0 mix 100
+PRISM pitch 0 energy 248097008 frozen 0 mix 100
+PRISM pitch 12 energy 206675815 frozen 0 mix 100
+PRISM pitch 24 energy 482836972 frozen 0 mix 100
+FX/CLOCK PASS: owned overlapping gates, mixed grid, wrapped notes, UI, modulation, sessions, snapshots, 6 reverbs, 20 delay/rhythm combinations, PRISM pitch extremes/freeze
+VA UBSAN PASS: all models, families, register extremes and damping extremes
+tables: build/gen/tonitor_tables.h
+font XL: ttf h 82, 11489 B
+font L: ttf h 41, 10005 B
+font M: ttf h 25, 5788 B
+font S: ttf h 17, 3850 B
+font XS: ttf h 14, 2703 B
+font BRAND: ttf h 45, 1836 B
+font CREDIT: ttf h 11, 1293 B
+RYUJI hybrid: 264054 bytes; 10 VA sources; 48 total sources
+RYUJI WASM: kit page, audio, source/tune/lock controls and random PASS
+WASM ACID/CLOCK: audio, page traversal, BPM, per-target config and track isolation PASS
+loader: image 8112 B, ota.bin 6836 B
+image 569496 B of 581564; RAM .data+.bss 97252 B of 98304; pool 330480 B of 344064
+bocjuhn-1.0-rc10.fwsc 609992 bytes; version B110 SHA256 91ef02e0e0f7868c94e2a781449e512fb34070309565533d7ccaeec413e0c09d
+Chromium UI: RYUJI audio, KIT page and RC10 installer hash verification PASS; no page errors.
+Installer unit test: corrupt package rejected; no MIDI access on load PASS.

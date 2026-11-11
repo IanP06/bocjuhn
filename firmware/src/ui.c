@@ -3026,7 +3026,7 @@ static void sounds_init(void)
         cal_design(&cal_buf[l][0], -1, s * 13u + 5u, PATH_OPEN, GEN_NOW);
         rus_design(&rus_buf[l][0], -1, s * 17u + 9u, PATH_OPEN, GEN_NOW);
         dr_design(&dr_buf[l][0], -1, s * 19u + 11u, PATH_OPEN, GEN_NOW);
-        ba_design(&ba_buf[l][0], -1, s * 23u + 13u, PATH_OPEN, GEN_NOW);
+        ba_design(&ba_buf[l][0], 6+(int32_t)(l&1u), s * 23u + 13u, PATH_OPEN, GEN_NOW);
         hv_design(&hv_buf[l][0], -1, s * 29u + 17u, PATH_OPEN, GEN_NOW);
         ob_design(&ob_buf[l][0], -1, s * 31u + 19u, PATH_OPEN, GEN_NOW);
         fm_pub[l] = fm_use[l] = an_pub[l] = an_use[l] = ob_pub[l] = ob_use[l] = 0;

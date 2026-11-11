@@ -39,17 +39,17 @@ int main(void){
         ba_design(&d,6,123,PATH_OPEN,GEN_NOW);ba_kit_get(&d,&k);unsigned pad=PULSE_ROLE[source];k.source[pad]=source;ba_kit_put(&d,&k);
         ba_voice_t native,held;ba_init(&native,1);native.mac[3]=19;ba_note_on(&native,&d,48+pad,127,1);held=native;held.hold=1;
         int32_t x[CTL],y[CTL];
-        for(unsigned block=0;block<2000;block++){
+        for(unsigned block=0;block<5000;block++){
             memset(x,0,sizeof x);memset(y,0,sizeof y);ba_render(&native,&d,x,CTL);ba_render(&held,&d,y,CTL);
             assert(!memcmp(x,y,sizeof x));assert(native.pos==held.pos && native.live==held.live);
         }
         assert(!native.live && !held.live);
-        assert(PULSE_PCM[PULSE_OFF[source]]==0 && PULSE_PCM[PULSE_OFF[source+1]-1]==0);
+        assert(PULSE_MU[PULSE_PCM[PULSE_OFF[source]]]==0 && PULSE_MU[PULSE_PCM[PULSE_OFF[source+1]-1]]==0);
     }
     puts("RYUJI ENVELOPE PASS: all 48 sources sample-identical with hold on/off; finite tails; zero sample endpoints");
     grain_reset();ui.sel=5;ui.env_on[5][ENG_BAY]=1;
     ui.env[5][ENG_BAY][0]=0;ui.env[5][ENG_BAY][1]=0;ui.env[5][ENG_BAY][2]=100;ui.env[5][ENG_BAY][3]=100;mac_apply(5);
-    press_key(0,1);run_blocks(3000,0);
+    press_key(0,1);run_blocks(5000,0);
     for(unsigned v=0;v<NVOICE;v++)assert(vox[v].layer!=5 || !vox[v].sounding);
     press_key(0,0);
     puts("RYUJI MIXER ENVELOPE PASS: held maximum-sustain pad ends with its one-shot");

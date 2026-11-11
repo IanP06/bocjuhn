@@ -1,0 +1,123 @@
+sound,variant,file,t95_ms,energy_duration_ms,centroid_hz,above_8k_db,peak_dbfs
+808 Kick,raw,1-0-raw.wav,149.0,146.7,49.3,-48.5,-7.2
+808 Kick,default,1-0-default.wav,116.4,113.9,49.4,-55.1,-11.4
+808 Kick,least-colored,1-0-least-colored.wav,107.4,105.4,49.5,-50.2,-10.2
+808 Kick,reference,BD-808A1.wav,242.7,239.6,52.8,-75.2,-3.0
+808 Kick,reference,BD-808A2.wav,242.6,239.6,52.8,-75.2,-3.0
+808 Kick,reference,BD-808A3.wav,242.6,239.6,52.8,-75.1,-3.0
+808 Kick,reference,BD-808A4.wav,242.6,239.6,52.8,-75.2,-3.0
+808 Kick,reference,BD-808A5.wav,242.6,239.6,52.8,-73.5,-6.0
+808 Snare,raw,1-2-raw.wav,59.0,58.0,2960.6,-8.9,-7.2
+808 Snare,default,1-2-default.wav,59.8,58.9,2168.8,-11.4,-11.6
+808 Snare,least-colored,1-2-least-colored.wav,66.0,65.1,2873.5,-9.1,-9.9
+808 Snare,reference,SD-808A1.wav,39.7,38.2,5771.6,-6.9,-1.8
+808 Snare,reference,SD-808A2.wav,38.8,37.2,5850.5,-6.5,-3.7
+808 Snare,reference,SD-808A3.wav,39.4,37.9,5711.4,-6.8,-3.6
+808 Snare,reference,SD-808A4.wav,40.2,38.6,5758.9,-7.0,-2.7
+808 Snare,reference,SD-808A5.wav,39.1,37.8,5672.2,-6.8,-7.5
+808 Clap,raw,1-3-raw.wav,48.7,47.1,5543.4,-6.0,-7.2
+808 Clap,default,1-3-default.wav,51.5,50.1,4764.0,-7.7,-12.2
+808 Clap,least-colored,1-3-least-colored.wav,54.1,52.7,5516.5,-6.1,-10.6
+808 Clap,reference,CP-808A1.wav,73.7,69.9,2990.5,-11.4,-4.5
+808 Clap,reference,CP-808A2.wav,82.4,79.7,3047.3,-11.2,-4.6
+808 Clap,reference,CP-808A3.wav,81.7,78.2,3218.6,-10.4,-6.1
+808 Clap,reference,CP-808A4.wav,83.3,79.3,2856.2,-12.3,-5.4
+808 Clap,reference,CP-808A5.wav,78.3,75.1,3209.0,-11.1,-6.1
+808 Closed hat,raw,1-4-raw.wav,11.8,11.5,3440.5,-9.2,-7.2
+808 Closed hat,default,1-4-default.wav,14.3,14.0,1920.8,-12.7,-11.6
+808 Closed hat,least-colored,1-4-least-colored.wav,16.4,16.1,1890.6,-11.9,-9.8
+808 Closed hat,reference,CH-808A1.wav,33.3,32.4,11867.1,-0.9,-7.8
+808 Closed hat,reference,CH-808A2.wav,30.9,30.1,11790.1,-1.0,-7.4
+808 Closed hat,reference,CH-808A3.wav,31.8,31.1,11793.4,-0.9,-6.3
+808 Closed hat,reference,CH-808A4.wav,34.4,33.7,11887.8,-1.0,-7.5
+808 Closed hat,reference,CH-808A5.wav,34.4,33.7,11886.7,-1.0,-10.5
+808 Open hat,raw,1-5-raw.wav,92.9,91.2,3243.5,-9.6,-7.2
+808 Open hat,default,1-5-default.wav,83.3,82.2,2560.1,-12.3,-11.5
+808 Open hat,least-colored,1-5-least-colored.wav,87.1,85.8,3225.2,-9.7,-9.9
+808 Open hat,reference,OH-808A1.wav,435.1,426.1,8469.1,-3.7,-3.8
+808 Open hat,reference,OH-808A2.wav,430.6,422.8,8486.3,-3.7,-6.0
+808 Open hat,reference,OH-808A3.wav,439.3,428.2,8451.6,-3.8,-6.3
+808 Open hat,reference,OH-808A4.wav,441.7,432.3,8473.9,-3.7,-5.5
+808 Open hat,reference,OH-808A5.wav,435.4,426.3,8445.3,-3.8,-9.6
+808 Cowbell/Ride,raw,1-10-raw.wav,56.2,55.6,670.2,-40.1,-7.2
+808 Cowbell/Ride,default,1-10-default.wav,56.1,55.2,667.6,-45.7,-11.5
+808 Cowbell/Ride,least-colored,1-10-least-colored.wav,56.1,55.6,667.8,-41.6,-9.7
+808 Cowbell/Ride,reference,CB-808A1.wav,124.1,121.2,856.8,-33.5,-4.7
+808 Cowbell/Ride,reference,CB-808A2.wav,118.3,116.6,857.7,-33.5,-3.2
+808 Cowbell/Ride,reference,CB-808A3.wav,126.8,124.2,857.8,-33.5,-4.4
+808 Cowbell/Ride,reference,CB-808A4.wav,126.1,124.2,856.4,-33.5,-4.7
+808 Cowbell/Ride,reference,CB-808A5.wav,125.9,123.6,857.5,-33.5,-7.2
+808 Cymbal/Crash,raw,1-11-raw.wav,137.4,134.5,3268.0,-9.3,-7.2
+808 Cymbal/Crash,default,1-11-default.wav,107.6,105.2,2524.0,-12.1,-11.6
+808 Cymbal/Crash,least-colored,1-11-least-colored.wav,114.9,112.5,3251.3,-9.3,-9.7
+808 Cymbal/Crash,reference,CY-808A1.wav,895.1,892.1,8623.2,-3.5,-5.4
+808 Cymbal/Crash,reference,CY-808A2.wav,870.4,868.0,8680.1,-3.4,-4.5
+808 Cymbal/Crash,reference,CY-808A3.wav,850.9,849.0,8778.7,-3.3,-5.6
+808 Cymbal/Crash,reference,CY-808A4.wav,877.4,874.3,8694.1,-3.4,-5.4
+808 Cymbal/Crash,reference,CY-808A5.wav,923.7,921.2,8544.1,-3.6,-8.6
+909 Kick,raw,2-0-raw.wav,102.5,100.5,61.9,-49.9,-7.2
+909 Kick,default,2-0-default.wav,93.8,91.5,63.3,-55.8,-11.2
+909 Kick,least-colored,2-0-least-colored.wav,85.4,83.7,63.0,-51.3,-9.7
+909 Kick,reference,BD-909A1.wav,173.7,166.6,53.7,-67.5,-8.2
+909 Kick,reference,BD-909A2.wav,173.7,166.6,53.6,-67.4,-8.3
+909 Kick,reference,BD-909A3.wav,173.7,166.6,53.6,-67.4,-8.2
+909 Kick,reference,BD-909A4.wav,173.7,166.7,53.6,-67.4,-8.2
+909 Kick,reference,BD-909A5.wav,173.7,166.6,53.6,-67.6,-8.3
+909 Kick,reference,BD-909B1.wav,171.5,164.7,86.6,-67.8,-8.1
+909 Kick,reference,BD-909B2.wav,171.6,164.7,87.0,-68.0,-8.1
+909 Kick,reference,BD-909B3.wav,171.3,164.6,86.8,-67.9,-8.1
+909 Kick,reference,BD-909B4.wav,171.4,164.7,86.4,-68.0,-8.2
+909 Kick,reference,BD-909B5.wav,171.6,164.7,87.0,-67.8,-8.1
+909 Snare,raw,2-2-raw.wav,51.2,50.3,2287.6,-10.5,-7.2
+909 Snare,default,2-2-default.wav,56.0,55.1,1741.4,-13.0,-11.8
+909 Snare,least-colored,2-2-least-colored.wav,61.4,60.6,2258.3,-10.6,-9.9
+909 Snare,reference,SD-909A1.wav,99.8,97.2,5073.9,-5.6,-3.3
+909 Snare,reference,SD-909A2.wav,100.4,97.9,5216.3,-5.4,-3.0
+909 Snare,reference,SD-909A3.wav,100.1,97.4,5143.9,-5.7,-3.0
+909 Snare,reference,SD-909A4.wav,101.2,98.6,5146.5,-5.6,-3.0
+909 Snare,reference,SD-909A5.wav,102.0,99.4,5183.9,-5.7,-3.6
+909 Snare,reference,SD-909B1.wav,58.4,56.0,3393.0,-7.2,-3.0
+909 Snare,reference,SD-909B2.wav,59.0,56.4,3422.6,-7.9,-3.3
+909 Snare,reference,SD-909B3.wav,57.4,55.2,3633.2,-7.4,-3.2
+909 Snare,reference,SD-909B4.wav,58.6,56.3,3587.5,-7.1,-3.0
+909 Snare,reference,SD-909B5.wav,59.0,56.6,3603.1,-7.2,-3.2
+909 Clap,raw,2-3-raw.wav,47.3,46.1,5672.4,-6.0,-7.2
+909 Clap,default,2-3-default.wav,50.1,49.2,4870.5,-7.6,-12.0
+909 Clap,least-colored,2-3-least-colored.wav,56.5,55.6,5639.7,-6.0,-10.0
+909 Clap,reference,CP-909A1.wav,55.1,54.3,2545.3,-12.4,-3.5
+909 Clap,reference,CP-909A2.wav,56.5,56.0,2815.2,-11.4,-7.7
+909 Clap,reference,CP-909A3.wav,58.3,57.4,2879.8,-11.7,-6.6
+909 Clap,reference,CP-909A4.wav,58.6,58.4,2697.8,-11.5,-3.8
+909 Clap,reference,CP-909A5.wav,59.7,59.3,2583.5,-11.8,-6.3
+909 Closed hat,raw,2-4-raw.wav,11.7,11.1,5227.0,-8.5,-7.2
+909 Closed hat,default,2-4-default.wav,16.1,15.6,2532.5,-12.4,-11.6
+909 Closed hat,least-colored,2-4-least-colored.wav,20.4,19.8,2363.5,-11.9,-9.7
+909 Closed hat,reference,CH-909A1.wav,65.0,63.6,8486.4,-3.1,-3.3
+909 Closed hat,reference,CH-909A2.wav,64.9,63.6,8487.4,-3.1,-3.2
+909 Closed hat,reference,CH-909A3.wav,64.9,63.6,8487.5,-3.1,-3.1
+909 Closed hat,reference,CH-909A4.wav,64.9,63.7,8487.8,-3.1,-3.1
+909 Closed hat,reference,CH-909A5.wav,64.9,63.7,8487.4,-3.1,-3.1
+909 Open hat,raw,2-5-raw.wav,95.7,93.3,5096.4,-8.2,-7.2
+909 Open hat,default,2-5-default.wav,85.8,84.1,4444.8,-10.3,-11.5
+909 Open hat,least-colored,2-5-least-colored.wav,95.5,93.7,5081.9,-8.2,-9.7
+909 Open hat,reference,OH-909A1.wav,150.8,146.2,8300.3,-3.2,-8.3
+909 Open hat,reference,OH-909A2.wav,150.9,146.3,8300.5,-3.2,-8.5
+909 Open hat,reference,OH-909A3.wav,150.9,146.3,8300.4,-3.2,-8.4
+909 Open hat,reference,OH-909A4.wav,150.9,146.3,8300.1,-3.2,-8.6
+909 Open hat,reference,OH-909A5.wav,150.9,146.3,8299.7,-3.2,-8.4
+909 Cowbell/Ride,raw,2-10-raw.wav,209.6,207.6,4941.7,-6.8,-7.2
+909 Cowbell/Ride,default,2-10-default.wav,131.9,131.0,3490.0,-9.9,-11.5
+909 Cowbell/Ride,least-colored,2-10-least-colored.wav,151.9,151.0,4606.6,-7.1,-9.8
+909 Cowbell/Ride,reference,RI-909A1.wav,498.0,493.5,7665.3,-4.6,-14.2
+909 Cowbell/Ride,reference,RI-909A2.wav,498.2,493.7,7665.9,-4.6,-14.6
+909 Cowbell/Ride,reference,RI-909A3.wav,497.6,493.1,7666.7,-4.6,-14.6
+909 Cowbell/Ride,reference,RI-909A4.wav,497.6,493.0,7666.5,-4.6,-14.5
+909 Cowbell/Ride,reference,RI-909A5.wav,497.9,493.4,7666.3,-4.6,-14.9
+909 Cymbal/Crash,raw,2-11-raw.wav,127.2,125.0,4943.5,-8.5,-7.2
+909 Cymbal/Crash,default,2-11-default.wav,97.2,95.4,4230.7,-11.1,-11.6
+909 Cymbal/Crash,least-colored,2-11-least-colored.wav,105.0,103.1,4916.5,-8.6,-10.0
+909 Cymbal/Crash,reference,CR-909A1.wav,528.1,509.3,6007.1,-6.0,-11.9
+909 Cymbal/Crash,reference,CR-909A2.wav,528.0,509.1,6008.5,-5.9,-11.7
+909 Cymbal/Crash,reference,CR-909A3.wav,528.0,509.2,6007.7,-6.0,-11.8
+909 Cymbal/Crash,reference,CR-909A4.wav,528.0,509.1,6008.0,-5.9,-12.6
+909 Cymbal/Crash,reference,CR-909A5.wav,527.8,509.0,6008.6,-5.9,-12.1

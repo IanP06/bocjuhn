@@ -1,0 +1,198 @@
+[
+  {
+    "file": "BD-808A1",
+    "codec": "PCM8",
+    "samples": 34405,
+    "bytes": 34405,
+    "snr_db": 35.97
+  },
+  {
+    "file": "BD-808A1",
+    "codec": "PCM16",
+    "samples": 34405,
+    "bytes": 68810,
+    "snr_db": 84.16
+  },
+  {
+    "file": "BD-808A1",
+    "codec": "MU8",
+    "samples": 34405,
+    "bytes": 34405,
+    "snr_db": 37.91
+  },
+  {
+    "file": "BD-808A1",
+    "codec": "IMA4-block64",
+    "samples": 34405,
+    "bytes": 19354,
+    "snr_db": 36.66
+  },
+  {
+    "file": "SD-808A1",
+    "codec": "PCM8",
+    "samples": 5490,
+    "bytes": 5490,
+    "snr_db": 32.1
+  },
+  {
+    "file": "SD-808A1",
+    "codec": "PCM16",
+    "samples": 5490,
+    "bytes": 10980,
+    "snr_db": 80.11
+  },
+  {
+    "file": "SD-808A1",
+    "codec": "MU8",
+    "samples": 5490,
+    "bytes": 5490,
+    "snr_db": 37.67
+  },
+  {
+    "file": "SD-808A1",
+    "codec": "IMA4-block64",
+    "samples": 5490,
+    "bytes": 3089,
+    "snr_db": 13.74
+  },
+  {
+    "file": "OH-808A1",
+    "codec": "PCM8",
+    "samples": 33890,
+    "bytes": 33890,
+    "snr_db": 32.99
+  },
+  {
+    "file": "OH-808A1",
+    "codec": "PCM16",
+    "samples": 33890,
+    "bytes": 67780,
+    "snr_db": 81.17
+  },
+  {
+    "file": "OH-808A1",
+    "codec": "MU8",
+    "samples": 33890,
+    "bytes": 33890,
+    "snr_db": 37.76
+  },
+  {
+    "file": "OH-808A1",
+    "codec": "IMA4-block64",
+    "samples": 33890,
+    "bytes": 19065,
+    "snr_db": 13.5
+  },
+  {
+    "file": "CH-909A1",
+    "codec": "PCM8",
+    "samples": 7728,
+    "bytes": 7728,
+    "snr_db": 31.71
+  },
+  {
+    "file": "CH-909A1",
+    "codec": "PCM16",
+    "samples": 7728,
+    "bytes": 15456,
+    "snr_db": 80.42
+  },
+  {
+    "file": "CH-909A1",
+    "codec": "MU8",
+    "samples": 7728,
+    "bytes": 7728,
+    "snr_db": 37.8
+  },
+  {
+    "file": "CH-909A1",
+    "codec": "IMA4-block64",
+    "samples": 7728,
+    "bytes": 4348,
+    "snr_db": 14.2
+  },
+  {
+    "file": "OH-909A1",
+    "codec": "PCM8",
+    "samples": 20337,
+    "bytes": 20337,
+    "snr_db": 29.85
+  },
+  {
+    "file": "OH-909A1",
+    "codec": "PCM16",
+    "samples": 20337,
+    "bytes": 40674,
+    "snr_db": 77.88
+  },
+  {
+    "file": "OH-909A1",
+    "codec": "MU8",
+    "samples": 20337,
+    "bytes": 20337,
+    "snr_db": 37.7
+  },
+  {
+    "file": "OH-909A1",
+    "codec": "IMA4-block64",
+    "samples": 20337,
+    "bytes": 11440,
+    "snr_db": 14.41
+  },
+  {
+    "file": "RI-909A1",
+    "codec": "PCM8",
+    "samples": 48691,
+    "bytes": 48691,
+    "snr_db": 29.78
+  },
+  {
+    "file": "RI-909A1",
+    "codec": "PCM16",
+    "samples": 48691,
+    "bytes": 97382,
+    "snr_db": 78.04
+  },
+  {
+    "file": "RI-909A1",
+    "codec": "MU8",
+    "samples": 48691,
+    "bytes": 48691,
+    "snr_db": 37.64
+  },
+  {
+    "file": "RI-909A1",
+    "codec": "IMA4-block64",
+    "samples": 48691,
+    "bytes": 27389,
+    "snr_db": 12.52
+  },
+  {
+    "file": "CR-909A1",
+    "codec": "PCM8",
+    "samples": 45036,
+    "bytes": 45036,
+    "snr_db": 32.63
+  },
+  {
+    "file": "CR-909A1",
+    "codec": "PCM16",
+    "samples": 45036,
+    "bytes": 90072,
+    "snr_db": 80.91
+  },
+  {
+    "file": "CR-909A1",
+    "codec": "MU8",
+    "samples": 45036,
+    "bytes": 45036,
+    "snr_db": 37.78
+  },
+  {
+    "file": "CR-909A1",
+    "codec": "IMA4-block64",
+    "samples": 45036,
+    "bytes": 25334,
+    "snr_db": 14.68
+  }
+]
