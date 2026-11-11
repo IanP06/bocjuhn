@@ -11,7 +11,13 @@ License: GPL-3.0-only, component licenses retained.
 The Hub reads the newest release with a .fwsc asset and root fmhub.json every
 three hours according to https://thefirmwarehub.com/submit/.
 No new submission or email is needed for this already listed repository.
-The card text and guide now describe RC9 Hybrid kits / pinned guide / filters.
+The card text describes the instrument as a whole, not the latest release.
+Keep this editorial approach for every update: explain what bocjuhn is and
+its main musical capabilities in plain English, within 300 characters.
+Put version-specific changes and validation status in the release notes
+and README; the guide link can follow the current release documentation.
+Release preparation must preserve this description unless the instrument's
+overall capabilities change. See AGENTS.md for the repository policy.
 
 Hardware: RC7 operation was confirmed by the owner on 2026-11-02.
 RC9 software checks pass; RC9 physical validation remains pending.
