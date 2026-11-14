@@ -107,3 +107,5 @@ Rings, msfa and the bundled fonts. The new visual drawings are original,
 inspired by JIANT's organisms and OP-1/OP-XY's instrument graphics.
 
 This is unofficial community firmware, provided without warranty.
+
+You can also try bocjuhn in the browser, no flashing needed, in the free community [FM-1 Emulator](https://fm1-emulator.atst.tools/).
